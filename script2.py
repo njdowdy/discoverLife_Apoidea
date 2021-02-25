@@ -59,6 +59,7 @@ data[0][1401] = '\xa0\xa0\xa0Andrena takachihoi\xa0Hirashima, 1964, emend.' \
                 '\xa0--\xa0Andrena (Euandrena) takachihsi\xa0' \
                 'Hirashima, 1964, incorrect original spelling in species heading'
 
+
 # define custom functions
 
 
@@ -69,6 +70,12 @@ def unicode_name_fix(line_in, parent_id_in):
     line_out = line_out.replace(' Evylaeus)', '\xa0Lasioglossum (Evylaeus)')
     line_out = line_out.replace(' Dialictus)', '\xa0Lasioglossum (Dialictus)')
     line_out = line_out.replace(' Austronomia)', '\xa0Lipotriches (Austronomia)')
+    line_out = line_out.replace('\xa0Hedicke, 1938, Andrena ', '\xa0Hedicke, 1938;\xa0Andrena ')
+    line_out = line_out.replace('Michener, 1966, Compsomelissa', 'Michener, 1966;\xa0Compsomelissa')
+    line_out = line_out.replace('Andrena cingulata auct , not Fabricius', 'Andrena cingulata_auct,_not_Fabricius')
+    line_out = line_out.replace('argentata auct, not Fabricius, 1793', 'argentata_auct_not_Fabricius,_1793')
+    line_out = line_out.replace('subspecies Dieunomia', 'subspecies;\xa0Dieunomia')
+
     # log which lines got changed for manual verification!
     if line_out != line_in:
         log_out = {
@@ -93,7 +100,7 @@ def genus_extractor(record):
 
 def species_extractor(record):
     species_exists = [x for x in record.split(' ') if re.match(r'^[a-z]', x) or
-                   re.search(r'^[A-Z]-', x) or re.search(r'^[0-9]-', x)]
+                      re.search(r'^[A-Z]-', x) or re.search(r'^[0-9]-', x)]
     species_exists = [x for x in species_exists if '(' not in x and ')' not in x]  # handles (Subgenus [text])
     if species_exists:
         species_out = species_exists[0]
@@ -104,7 +111,9 @@ def species_extractor(record):
 
 def subspecies_extractor(species_in, record):
     subspecies_exists = re.findall(fr'{species_in} (.*?) [A-Z]', record)
-    if subspecies_exists and len(subspecies_exists[0].split(' ')) == 1:
+    subspecies_exists = [x for x in subspecies_exists if not re.search(r',$|^[A-Z]|and', x)]
+    if subspecies_exists:
+    #if subspecies_exists and len(subspecies_exists[0].split(' ')) == 1:
         subspecies_out = subspecies_exists[0].replace('(', '').replace(')', '')
     elif subspecies_exists:
         subspecies_out = ''  # not sure how to handle something like: 'Andrena cingulata auct , not Fabricius'
@@ -115,10 +124,9 @@ def subspecies_extractor(species_in, record):
 
 def subgenus_extractor(genus_in, species_in, record):
     subgenus_exists = re.findall(fr'{genus_in} (.*?) {species_in}', record)
-
     if subgenus_exists:
         subgenus_out = subgenus_exists[0].replace('(', '').replace(')', '')
-    # if contains 'sl' change to a subgenus note of 'sensu latu'
+        # if contains 'sl' change to a subgenus note of 'sensu latu'
         if ' sl' in subgenus_out:
             subgenus_out = subgenus_out.replace(' sl', '_sl')
     else:
@@ -137,13 +145,87 @@ def publication_extractor(record):
 
 
 def publication_parser(mypub):
+    # PASS: mypub = 'C.D. Author, 2000'
+    # PASS: mypub = 'C.D. Author'
+    # PASS: mypub = '1999'
+    # PASS: mypub = '1999, note'
+    # PASS: mypub = 'C.D. Author, note'
+    # PASS: mypub = 'ABC Author and DE Author, 2000'
+    # PASS: mypub = 'ABC Author y DE Author, 2000'
+    # PASS: mypub = 'ABC Author & DE Author, 2000'
+    # PASS: mypub = 'Author, A Author and B Author, 2000'
+    # PASS: mypub = 'A Author B Author C Author, 2000'
+    # PASS: mypub = 'A B Author, CD Author, Nick Dowdy, 2000, first note, second note'
+    # PASS: mypub = 'A B Author, CD Author, Nick J. Dowdy, 2000, first note, second note'
+    # PASS: mypub = 'Authora Authorb and Authorc, 2000, note'
+    # PASS: mypub = "de Bruin, Dowdy, van de Kamp, van O'Brian, 2000"
+    # FAIL: mypub = "de Bruin Dowdy van de Kamp van O'Brian, 2000"
+    # FAIL: mypub = 'Lastname, AB, CD Lastname, and EF Lastname, 2000, note1, note2'
+    # FAIL: mypub = 'Lastname, AB, Lastname C.D., Lastname E.F, 2000, note1, note2'
+    # FAIL: mypub = 'Lastname, AB  Lastname C.D.  Lastname E.F, 2000, note1, note2'
+
+    if mypub:
+        mypub.replace(' ', '').replace('.', '')  # combine everything
+        year_exists = re.search(r'[0-9][0-9][0-9][0-9]', mypub)  # find position of year, if it exists
+        if year_exists:
+            year_start_index = year_exists.span()[0]
+            year_end_index = year_exists.span()[1]
+            year_out = mypub[year_start_index:year_end_index]
+            publication_notes_out = '; '.join([x.strip() for x in mypub[year_end_index:].split(',') if x])
+        else:
+            year_out = '????'
+            publication_notes_exist = re.search(r', [a-z].*?$', mypub)  # notes are typically ', [a-z][a-z]...'
+            if publication_notes_exist:
+                publication_notes_out = '; '.join([x.strip() for x in publication_notes_exist[0].split(',') if x])
+                year_start_index = publication_notes_exist.span()[0]
+            else:
+                publication_notes_out = ''
+                year_start_index = len(mypub)
+        authors = mypub[0:year_start_index]
+        space_sep_authors = [x for x in authors.replace(', ', '').split(' ') if x not in ['and', '&', 'y']]
+        names2 = [x for x in space_sep_authors if re.search(r'^[A-z]([^A-Z]| [A-Z])*?[a-z]$', x)]
+        single_name_authors_only = len(names2) - len(space_sep_authors)
+        if single_name_authors_only == 0:
+            author_list_out = space_sep_authors
+        else:
+            authors = re.sub(r', $', '', authors)
+            if ',' not in authors:
+                test = [x.capitalize() if re.match(r'^[a-zA-Z]$', x) else x for x in space_sep_authors]
+                if any([re.match(r'^[A-Z]$', x) for x in test]):  # if any test are single letter only
+                    authors = ''.join([x.capitalize() if re.match(r'^[a-zA-Z]$', x) else x for x in space_sep_authors])
+                    authors = re.sub(r'([a-z])([A-Z][a-zA-z])', '\\1, \\2', authors)
+            comma_sep_authors = authors.replace(' and ', ', ').replace(' y ', ', ').replace(' & ', ', ').split(',')
+            author_list_out = [x.replace(',', '').strip() for x in comma_sep_authors if x.replace(',', '').replace(' ', '')]
+            unseparated_authors_exists = [re.findall(r'[A-Z][A-Z]([a-z]*?)[a-z][A-Z]', x) for x in author_list_out]  # unseparated means AuthorAuthor
+            if any(unseparated_authors_exists):
+                author_list_out = [re.findall(r'.*?[a-z](?=(?:[A-Z])|$)', x.strip()) for x in author_list_out][0]
+            author_list_out = [re.sub(r"([a-z])\. ", "\\1 ", re.sub(r'^\. ', '', re.sub(r"([A-Z])", ". \\1", x).strip().replace('..', '.'))) for x in author_list_out]
+        number_of_authors = len(author_list_out)
+        author_list_out = [re.sub(r'([A-Z]\.)([A-Z]\.) ', '\\1 \\2 ', re.sub(r'([a-z])\. ', '\\1 ', x.replace('. . ', '. ').replace(' . ', '. '))) for x in author_list_out]
+        if number_of_authors == 0:
+            citation_out = 'Unknown, ' + year_out
+        elif number_of_authors == 1:
+            citation_out = author_list_out[0] + ', ' + year_out
+        elif number_of_authors == 2:
+            citation_out = author_list_out[0] + ' and ' + author_list_out[1] + ', ' + year_out
+        else:
+            citation_out = ', '.join(author_list_out[0:-1]) + ', and ' + author_list_out[-1] + ', ' + year_out
+    else:
+        author_list_out, year_out, citation_out, publication_notes_out = '', '', '', ''
+    return author_list_out, year_out, citation_out, publication_notes_out
+
+
+def old_publication_parser(mypub):
     if mypub:
         mypub_words = [x.strip() for x in mypub.split(' ')]
         year_exists = [x for x in mypub_words if re.search(r'[0-9][0-9][0-9][0-9]', x)]
         if year_exists:
             year_index = mypub_words.index(year_exists[0])
-            author_list_out = [x.strip().replace(',', '').replace('(', '').replace(')', '') for x in
-                               mypub_words[0:year_index] if x != 'and' and x != '&']
+            # author_list_out currently doesnt handle: Author *et al.*, XXXX
+            author_list_out = [encoding_fix(x.strip().replace(',', '').replace('(', '').replace(')', '')) for x in
+                               mypub_words[0:year_index] if x != 'and' and x != '&' and x != 'y']
+            author_list_out = [x for x in author_list_out if
+                               re.match(r'^[A-Z](.*?)[A-Z]$', x.replace('.', '').replace(' ', ''))]
             year_out = mypub_words[year_index].strip().replace(',', '').replace('(', '').replace(')', '')
             publication_notes_out = '; '.join(
                 [x.strip().replace(',', '') for x in ' '.join(mypub_words[year_index + 1:]).split(',')])
@@ -157,7 +239,7 @@ def publication_parser(mypub):
             else:
                 citation_out = ', '.join(author_list_out[0:-1]) + ', and ' + author_list_out[-1] + ', ' + year_out
         else:
-            author_list_out = [x.strip().replace(',', '').replace('(', '').replace(')', '') for x in mypub_words if
+            author_list_out = [encoding_fix(x.strip().replace(',', '').replace('(', '').replace(')', '')) for x in mypub_words if
                                re.search(r'^' + pLu, x)]
             year_out = ''
             last_author_index = [idx for idx, s in enumerate(mypub_words) if author_list_out[-1] in s][-1]
@@ -181,21 +263,43 @@ def to_canonical(genus_in, species_in):
     return ' '.join([genus_in.strip(), species_in.strip()])
 
 
+def encoding_fix(author_in):
+    author_out = re.sub(r'Reb.lo', 'Rebêlo', author_in)
+    author_out = re.sub(r'Sep.lveda', 'Sepúlveda', author_out)
+    author_out = re.sub(r'Qui.onez', 'Quiñonez', author_out)
+    author_out = re.sub(r'J.nior', 'Júnior', author_out)
+    author_out = re.sub(r'Y..ez', 'Yáñez', author_out)
+    author_out = re.sub(r'Ord..ez', 'Ordóñez', author_out)
+    return author_out
+
+
 def name_note_extractor(name_in):
     if '_' in name_in:
-        note_out = ' '.join([x.strip() for x in name_in.split('_')[1:]])
+        note_out = '_'.join([x.strip() for x in name_in.split('_')[1:]])
         # remove numbers from name notes (these are probably citation numbers?)
         # resolve some common abbreviated notes
-        note_out = '; '.join([re.sub(r'[0-9]$', '', x).
+        note_out = '; '.join([re.sub(r'[a-z][0-9]$', '', x).
                              replace('sic.', 'sic').
-                             replace('.', '').replace('auct', 'auctorum').
-                             replace('.', '').replace('sl', 'sensu lato')
-                              for x in note_out.split(' ')])
-        name_out = name_in.split('_')[0]
+                             replace('.', '').replace('auct', 'auctorum')
+                              for x in note_out.split(' ')]).\
+            replace('.', '').replace('sl', 'sensu lato').replace('homonytm', 'homonym')
+        note_out = re.sub(r'homony$', 'homonym', note_out)
+        note_out = re.sub(r'misdet', 'misidentification', note_out.replace('.', ''))
+        name_out = name_in.split('_')[0].replace('_', ' ')
     else:
         name_out = name_in
         note_out = ''
     return name_out, note_out
+
+
+def subspecies_prefix_cleaner(name_in):
+    name_out = name_in.replace('.', '').replace(',', '').replace('var ', 'variety ').\
+        replace('v ', 'variety ').replace('m ', 'morph ').replace('morpha ', 'morph ').\
+        replace('f ', 'form ').replace('ab ', 'abberration ').\
+        replace('aber ', 'abberration ').replace('aberr ', 'abberration ').\
+        replace('r ', 'race ').replace('rasse ', 'race ').replace('mut ', 'mutant')
+    # mod = ???  # not sure what 'mod' means, but it is present sometimes
+    return name_out
 
 
 # define temp structures and variables
@@ -207,13 +311,13 @@ accepted_genus = ''  # placeholder value
 accepted_species = ''  # placeholder value
 accepted_canonical_name = ''  # placeholder value
 family = ''  # first line in data should be first family
-i = 1  # loop counter
+# i = 1  # loop counter
 change_log = []
 
 for line in data[0]:
-    print(i)
+    # print(i)
     if '\xa0' in line:
-        parent_id, original_parent_id = name_id
+        parent_id, original_parent_id = name_id, name_id
         parsed, log_result = unicode_name_fix(line, parent_id)
         if log_result['parent_id'] != '':
             change_log.append(log_result)
@@ -221,17 +325,17 @@ for line in data[0]:
         # name = names[0]  # testing helper
         status = 'accepted'
         for name in names:
-            # TODO: data[0][82] might have problematic formatting
             genus, genus_notes = name_note_extractor(genus_extractor(name))
             species, species_notes = name_note_extractor(species_extractor(name))
             subgenus, subgenus_notes = name_note_extractor(subgenus_extractor(genus, species, name))
             subspecies, subspecies_notes = name_note_extractor(subspecies_extractor(species, name))  # TODO: Still failing in multi-authored names, author strings with 'and', 'var',
             canonical_name = to_canonical(genus, species)
             pub_data = publication_extractor(name)
-            author_list, year, citation, publication_notes = publication_parser(pub_data)  # TODO: Some authors are weird and need to be checked; encoding problems exist
+            author_list, year, citation, publication_notes = publication_parser(
+                pub_data)  # TODO: Some authors are weird and need to be checked; encoding problems exist
             # if publication_notes contains 'valid subspecies', raise status to 'accepted'
             accepted_subspecies = ''
-            if 'valid subspecies' in publication_notes:  # TODO: I need to test this functionality
+            if 'valid subspecies' in publication_notes:
                 status = 'accepted'
                 accepted_subspecies = subspecies
                 parent_id = name_id
@@ -258,17 +362,19 @@ for line in data[0]:
                 'species_notes': species_notes,
                 'subspecies_notes': subspecies_notes,
                 'publication': citation,
-                'publication_notes': publication_notes
+                'publication_notes': publication_notes,
+                'verbatim_name': name.strip(),
+                'source': 'Discover Life'
             }
             names_out_list.append(name_attributes)
             if author_list:
                 running_author_list = list(set(running_author_list + author_list))
-            parent_id = original_parent_id  # TODO: I need to test this functionality
+            parent_id = original_parent_id
             status = 'synonym'
             name_id += 1
     else:
         family = line.strip()
-    i += 1
+#    i += 1
 
 # write out
 names_data_out = pd.DataFrame(names_out_list)
