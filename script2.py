@@ -159,7 +159,7 @@ def publication_parser(mypub):
     # PASS: mypub = 'A B Author, CD Author, Nick J. Dowdy, 2000, first note, second note'
     # PASS: mypub = 'Authora Authorb and Authorc, 2000, note'
     # PASS: mypub = "de Bruin, Dowdy, van de Kamp, van O'Brian, 2000"
-    # FAIL: mypub = "de Bruin Dowdy van de Kamp van O'Brian, 2000"
+    # PASS: mypub = "de Bruin Dowdy van de Kamp van O'Brian, 2000"
     # FAIL: mypub = 'Lastname, AB, CD Lastname, and EF Lastname, 2000, note1, note2'
     # FAIL: mypub = 'Lastname, AB, Lastname C.D., Lastname E.F, 2000, note1, note2'
     # FAIL: mypub = 'Lastname, AB  Lastname C.D.  Lastname E.F, 2000, note1, note2'
@@ -183,10 +183,14 @@ def publication_parser(mypub):
                 year_start_index = len(mypub)
         authors = mypub[0:year_start_index]
         space_sep_authors = [x for x in authors.replace(', ', '').split(' ') if x not in ['and', '&', 'y']]
-        names2 = [x for x in space_sep_authors if re.search(r'^[A-z]([^A-Z]| [A-Z])*?[a-z]$', x)]
+        names2 = [x for x in space_sep_authors if re.search(r"^[A-z]([^A-Z]| [A-Z]|'[A-Z])*?[a-z]$", x)]
         single_name_authors_only = len(names2) - len(space_sep_authors)
         if single_name_authors_only == 0:
             author_list_out = space_sep_authors
+            # combine 'van' and 'de' with next word, until added to a word starting with [A-Z]
+            author_list_out = [re.sub(r'\s+', ' ', x).strip() for x in ''.join(
+                ['!' if x == 'van' else '@' if x == 'de' else x + ';' for x in
+                 author_list_out]).replace('@', ' de ').replace('!', ' van ').strip().split(';') if x]
         else:
             authors = re.sub(r', $', '', authors)
             if ',' not in authors:
@@ -201,7 +205,7 @@ def publication_parser(mypub):
                 author_list_out = [re.findall(r'.*?[a-z](?=(?:[A-Z])|$)', x.strip()) for x in author_list_out][0]
             author_list_out = [re.sub(r"([a-z])\. ", "\\1 ", re.sub(r'^\. ', '', re.sub(r"([A-Z])", ". \\1", x).strip().replace('..', '.'))) for x in author_list_out]
         number_of_authors = len(author_list_out)
-        author_list_out = [re.sub(r'([A-Z]\.)([A-Z]\.) ', '\\1 \\2 ', re.sub(r'([a-z])\. ', '\\1 ', x.replace('. . ', '. ').replace(' . ', '. '))) for x in author_list_out]
+        author_list_out = [re.sub(r'([A-Z]\.)([A-Z]\.) ', '\\1 \\2 ', re.sub(r'([a-z])\. ', '\\1 ', x.replace('. . ', '. ').replace(' . ', '. ').replace("'. ", "' "))) for x in author_list_out]
         if number_of_authors == 0:
             citation_out = 'Unknown, ' + year_out
         elif number_of_authors == 1:
