@@ -146,31 +146,48 @@ def publication_extractor(record):
 
 def publication_parser(mypub):
     # PASS: mypub = 'C.D. Author, 2000'
+    # PASS: mypub = 'C.D. Author, [2000]'
     # PASS: mypub = 'C.D. Author'
     # PASS: mypub = '1999'
     # PASS: mypub = '1999, note'
     # PASS: mypub = 'C.D. Author, note'
     # PASS: mypub = 'ABC Author and DE Author, 2000'
+    # PASS: mypub = 'ABC Author and DE Author, [2000], note'
     # PASS: mypub = 'ABC Author y DE Author, 2000'
     # PASS: mypub = 'ABC Author & DE Author, 2000'
     # PASS: mypub = 'Author, A Author and B Author, 2000'
+    # PASS: mypub = 'Author, A Author and B Author, [2000], note'
     # PASS: mypub = 'A Author B Author C Author, 2000'
+    # PASS: mypub = 'A Author B Author C Author, [2000], note'
     # PASS: mypub = 'A B Author, CD Author, Nick Dowdy, 2000, first note, second note'
+    # PASS: mypub = 'A B Author, CD Author, Nick Dowdy, [2000], first note, second note'
     # PASS: mypub = 'A B Author, CD Author, Nick J. Dowdy, 2000, first note, second note'
+    # PASS: mypub = 'A B Author, CD Author, Nick J. Dowdy, [2000], first note, second note'
     # PASS: mypub = 'Authora Authorb and Authorc, 2000, note'
+    # PASS: mypub = 'Authora Authorb and Authorc, [2000], note'
     # PASS: mypub = "de Bruin, Dowdy, van de Kamp, van O'Brian, 2000"
+    # PASS: mypub = "de Bruin, Dowdy, van de Kamp, van O'Brian, [2000], note"
     # PASS: mypub = "de Bruin Dowdy van de Kamp van O'Brian, 2000"
+    # PASS: mypub = "de Bruin Dowdy van de Kamp van O'Brian, [2000], note"
+    # PASS: mypub = "de Bruin Dowdy van de Kamp van O'Brian [2000], note"
     # FAIL: mypub = 'Lastname, AB, CD Lastname, and EF Lastname, 2000, note1, note2'
     # FAIL: mypub = 'Lastname, AB, Lastname C.D., Lastname E.F, 2000, note1, note2'
     # FAIL: mypub = 'Lastname, AB  Lastname C.D.  Lastname E.F, 2000, note1, note2'
 
     if mypub:
-        mypub.replace(' ', '').replace('.', '')  # combine everything
         year_exists = re.search(r'[0-9][0-9][0-9][0-9]', mypub)  # find position of year, if it exists
         if year_exists:
             year_start_index = year_exists.span()[0]
             year_end_index = year_exists.span()[1]
             year_out = mypub[year_start_index:year_end_index]
+            bracketed_date_exists = re.search(fr'\[{year_out}\]', mypub)
+            mypub = mypub.replace('[', '').replace(']', '')
+            if bracketed_date_exists:
+                bracketed_date = True
+                year_out = f'[{year_out}]'
+                year_start_index -= 1
+            else:
+                bracketed_date = False
             publication_notes_out = '; '.join([x.strip() for x in mypub[year_end_index:].split(',') if x])
         else:
             year_out = '????'
@@ -181,6 +198,7 @@ def publication_parser(mypub):
             else:
                 publication_notes_out = ''
                 year_start_index = len(mypub)
+            bracketed_date = False
         authors = mypub[0:year_start_index]
         space_sep_authors = [x for x in authors.replace(', ', '').split(' ') if x not in ['and', '&', 'y']]
         names2 = [x for x in space_sep_authors if re.search(r"^[A-z]([^A-Z]| [A-Z]|'[A-Z])*?[a-z]$", x)]
@@ -215,8 +233,8 @@ def publication_parser(mypub):
         else:
             citation_out = ', '.join(author_list_out[0:-1]) + ', and ' + author_list_out[-1] + ', ' + year_out
     else:
-        author_list_out, year_out, citation_out, publication_notes_out = '', '', '', ''
-    return author_list_out, year_out, citation_out, publication_notes_out
+        author_list_out, year_out, citation_out, publication_notes_out, bracketed_date = '', '', '', '', False
+    return author_list_out, year_out, citation_out, publication_notes_out, bracketed_date
 
 
 def old_publication_parser(mypub):
