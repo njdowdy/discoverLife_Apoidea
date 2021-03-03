@@ -5,7 +5,6 @@ from functions import functions
 class Test(TestCase):
     # test names like d'Brulio
     # test names like ABC de Authora
-    # test names like Dowdy et al, 2000
 
     def test_publication_basic(self):
         self.assertEqual((['C. D. Author'], '2000', 'C.D. Author, 2000', '', False),
@@ -52,13 +51,13 @@ class Test(TestCase):
                           'A.B. Lastnamea, C.D. Lastnameb, and E.F. Lastnamec, 2000', 'note1; note2', False),
                          functions.publication_parser(
                              'Lastnamea, AB, CD Lastnameb, and EF Lastnamec, 2000, note1, note2'))
-        # self.assertEqual((['A. B. Lastnamea', 'C. D. Lastnameb', 'E. F. Lastnamec'], '2000',
-        #                   'A.B. Lastnamea, C.D. Lastnameb, and E.F. Lastnamec, 2000', 'note1; note2', False),
-        #                  functions.publication_parser(
-        #                      'Lastnamea, AB, Lastnameb C.D., Lastnamec E.F, 2000, note1, note2'))
-        # self.assertEqual((['A. B. Lastnamea', 'C. D. Lastnameb', 'E. F. Lastnamec'], '2000',
-        #                   'A.B. Lastnamea, C.D. Lastnameb, and E.F. Lastnamec, 2000', 'note1; note2', False),
-        #                  functions.publication_parser('Lastnamea, AB Lastnameb C.D. Lastnamec E.F, 2000, note1, note2'))
+        self.assertEqual((['A. B. Lastnamea', 'C. D. Lastnameb', 'E. F. Lastnamec'], '2000',
+                          'A.B. Lastnamea, C.D. Lastnameb, and E.F. Lastnamec, 2000', 'note1; note2', False),
+                         functions.publication_parser(
+                             'Lastnamea, AB, Lastnameb C.D., Lastnamec E.F, 2000, note1, note2'))
+        self.assertEqual((['A. B. Lastnamea', 'C. D. Lastnameb', 'E. F. Lastnamec'], '2000',
+                          'A.B. Lastnamea, C.D. Lastnameb, and E.F. Lastnamec, 2000', 'note1; note2', False),
+                         functions.publication_parser('Lastnamea, AB Lastnameb C.D. Lastnamec E.F, 2000, note1, note2'))
         # self.assertEqual((['A. B. Lastnamea', 'C. D. Lastnameb', 'E. F. Lastnamec', 'G. H. Lastnamed',
         #                    'I. J. Lastnamek'], '2000',
         #                   'A.B. Lastnamea, C.D. Lastnameb, E.F. Lastnamec, G.H. Lastnamed, and I.J. Lastnamek, 2000',
@@ -67,7 +66,7 @@ class Test(TestCase):
         #                      'Lastnamea, AB Lastnameb C.D. Lastnamec E.F, G.H.,'
         #                      ' Lastnamed I. J. Lastnamek 2000, note1, note2'))
 
-    # def test_publication_namesWithLowercase(self):
+    #def test_publication_namesWithLowercase(self):
     #     self.assertEqual((['de Bruin', 'van de Kamp', "van O'Brian"], '2000',
     #                       "de Bruin, van de Kamp, and van O'Brian, 2000", '', False),
     #                      functions.publication_parser("de Bruin, van de Kamp, van O'Brian, 2000"))
