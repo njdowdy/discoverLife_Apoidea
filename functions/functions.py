@@ -153,8 +153,9 @@ def publication_parser(mypub):
             # authors = re.sub(r'([A-Z]) ([A-Z]) ', '\\1\\2 ', authors.replace('.', ''))  # no spaces between initials
             if not year_separated_by_comma:
                 authors = authors + ','
-            space_sep_authors = [x for x in authors.replace(', ', '').replace(',', '').split(' ') if
-                                 x not in ['and', '&', 'y']]
+            #space_sep_authors = [x for x in authors.replace(', ', '').replace(',', '').split(' ') if
+            #                     x not in ['and', '&', 'y']]
+            space_sep_authors = [x.replace(',', '') for x in authors.split(' ') if x not in ['and', '&', '&']]
             names2 = [x for x in space_sep_authors if re.search(r"^[A-z]([^A-Z]| [A-Z]|'[A-Z])*?[a-z]$", x)]
             single_name_authors_only = len(names2) - len(space_sep_authors)
             if single_name_authors_only == 0:
