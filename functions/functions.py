@@ -30,6 +30,7 @@ def flatten(mylist):
             rt.append(i)
     return rt
 
+
 def unicode_name_fix(line_in, parent_id_in):
     line_out = line_in.replace('ůoziůski', 'Ůoziůski')
     line_out = line_out.replace('_cincta', ' cincta')
@@ -58,6 +59,14 @@ def unicode_name_fix(line_in, parent_id_in):
         }
     line_out = line_out.replace('\xa0', ' ')
     return line_out, log_out
+
+
+def upper_repl(match):
+    return match.group(1).upper()
+
+
+def lower_repl(match):
+    return match.group(1).lower()
 
 
 def genus_extractor(record):
@@ -112,13 +121,13 @@ def publication_extractor(record):
 
 
 def publication_parser(mypub):
-    if mypub:
+    if mypub:  # if a publication was passed
         year_exists = re.search(r'[0-9][0-9][0-9][0-9]', mypub)  # find position of year, if it exists
-        if year_exists:
+        if year_exists:  # if a year exists in publication
             year_start_index = year_exists.span()[0]
             year_end_index = year_exists.span()[1]
             year_out = mypub[year_start_index:year_end_index]
-            bracketed_date_exists = re.search(fr"\[{year_out}\]", mypub)
+            bracketed_date_exists = re.search(rf'\[{year_out}\]', mypub)
             mypub = mypub.replace('[', '').replace(']', '')
             if bracketed_date_exists:
                 bracketed_date_out = True
@@ -129,11 +138,7 @@ def publication_parser(mypub):
                 year_out_print = year_out
             publication_notes_out = '; '.join([x.strip() for x in mypub[year_end_index:].split(',') if x])
             authors_exist = mypub[0:year_start_index].strip()
-            if authors_exist:
-                year_separated_by_comma = authors_exist[-1] == ','
-            else:
-                year_separated_by_comma = False
-        else:
+        else:  # a year is not in the publication
             year_out = '????'
             year_out_print = '????'
             publication_notes_exist = re.search(r', [a-z].*?$', mypub)  # notes are typically ', [a-z][a-z]...'
@@ -148,177 +153,108 @@ def publication_parser(mypub):
             bracketed_date_out = False
             year_separated_by_comma = True
         ### AUTHOR PARSING STARTS HERE
-        if authors_exist:  # if an author exists
-            authors = mypub[0:year_start_index].strip()
-            # authors = re.sub(r'([A-Z]) ([A-Z]) ', '\\1\\2 ', authors.replace('.', ''))  # no spaces between initials
-            if not year_separated_by_comma:
-                authors = authors + ','
-            #space_sep_authors = [x for x in authors.replace(', ', '').replace(',', '').split(' ') if
-            #                     x not in ['and', '&', 'y']]
-            space_sep_authors = [x.replace(',', '') for x in authors.split(' ') if x not in ['and', '&', '&']]
-            names2 = [x for x in space_sep_authors if re.search(r"^[A-z]([^A-Z]| [A-Z]|'[A-Z])*?[a-z]$", x)]
-            single_name_authors_only = len(names2) - len(space_sep_authors)
-            if single_name_authors_only == 0:
-                author_list_out = space_sep_authors
-                # combine 'van' and 'de' with next word, until added to a word starting with [A-Z]
-                author_list_out = [re.sub(r'\s+', ' ', x).strip() for x in ''.join(
-                    ['!' if x == 'van' else '@' if x == 'de' else x + ';' for x in
-                     author_list_out]).replace('@', ' de ').replace('!', ' van ').strip().split(';') if x]
+        if authors_exist:  # if an author string exists
+            authors = mypub[0:year_start_index].strip()  # authors are publication string up to location of year
+            authors = re.sub(r',$', r'', authors)  # remove trailing ','
+            authors = re.sub(r'([A-Z])\.', r'\1. ', authors).replace('  ', ' ')  # put a space between initials
+            if ' in ' in authors:
+                extra_author_info = re.search(r'( in .*)', authors)[0]  # capture 'in ...' text separately
+                if extra_author_info[0] != ' ':
+                    extra_author_info = ' ' + extra_author_info
+                if extra_author_info[-1] == ' ':
+                    extra_author_info = extra_author_info[0:-1]
+                authors = re.sub(extra_author_info, '', authors)
+                extra_author_info = re.sub(r'\b( et al).*', ',\\1.', extra_author_info)  # ensure 'et al' is formatted
             else:
-                authors = re.sub(r', $|,$', '', authors)
-                if ',' not in authors:
-                    test = [x.capitalize() if re.match(r'^[a-zA-Z]$', x) else x for x in space_sep_authors]
-                    if any([re.match(r'^[A-Z]$', x) for x in test]):  # if any test are single letter only
-                        authors = ''.join([x.capitalize() if re.match(r'^[a-zA-Z]$', x) else x for x
-                                           in space_sep_authors])
-                        authors = re.sub(r'([a-z])([A-Z][a-zA-z])', '\\1, \\2', authors)
-                comma_sep_authors = authors.replace(' and ', ', ').replace(' y ', ', ').replace(' & ', ', ').split(',')
-                author_list_out = [x.replace(',', '').strip() for x in comma_sep_authors if
-                                   x.replace(',', '').replace(' ', '')]
-                # unseparated_authors_exists = [re.findall(r'[A-Z][A-Z]([a-z]*?)[a-z][A-Z]', x) for x in
-                #                               author_list_out]  # unseparated means AuthorAuthor
-                # BELOW BREAKS A LOT OF BASIC FUNCTIONALITY???
-                # unseparated_authors_exists = [
-                #    re.findall(r'[A-Z][A-Z]([a-z]*?)[a-z][A-Z]|[A-Z]([a-z]*?)[A-Z]', x.replace('.', '').\
-                #    replace(' ', ''))
-                #    for x in author_list_out]  # unseparated means AuthorAuthor
-                # if any(unseparated_authors_exists):
-                #     # author_list_out = [re.findall(r'.*?[a-z](?=(?:[A-Z])|$)', x.strip()) for x in author_list_out][0]
-                #     author_list_out = ';'.join(author_list_out).replace(' ', ';').split(';')
-                    # items = [re.findall(r'.*?[a-z](?=(?:[A-Z])|$)', x.replace('.', '').replace(' ', '').\
-                    # strip()) for x in
-                    #          author_list_out]
-                    # author_list_out = [item for elem in items for item in elem]
-                author_list_out = [re.sub(r"([a-z])\. ", "\\1 ",
-                                          re.sub(r'^\. ', '', re.sub(r"([A-Z])", ". \\1", x).strip().
-                                                 replace('..', '.')))
-                                   for x in author_list_out]  # expands 'AB' to 'A. B'
-            author_list_out = [re.sub(r'([A-Z]\.)([A-Z]\.) ', '\\1 \\2 ', re.sub(r'([a-z])\. ', '\\1 ',
-                                                                                 x.replace('. . ', '. ').
-                                                                                 replace(' . ', '. ').
-                                                                                 replace("'. ", "'")))
-                               for x in author_list_out]
-            author_list_out = [x + '.' if re.search(r' [A-Z]$', x) else x for x in author_list_out]  # sometimes initals lose their trailing '.'
-            if len(author_list_out) > 1 and any([re.search(r'\. ([A-Z]\.)', x) for x in author_list_out]):
-                # fix names not properly separated with commas
-                author_list_out = [re.sub(r'\. (?![A-Z]\.)', '.;', x).split(';') for x in author_list_out]
-                #author_list_out = [' '.join(x) if re.search('[a-z]', x) else x for x in author_list_out]
-                author_list_out = [' '.join(x) if re.search(r'[a-z] [A-Z]', x[0]) else x for x in [y for y in author_list_out]] # EXPERIMENTAL
-                #author_list_out = [item.replace('. ', '.') for elem in author_list_out for item in elem]
-                # method 1 below
-                #author_list_out = [re.sub(r'\. ([A-Z]\.)', '.\\1', x) for x in author_list_out]  # by condensing initials
-                #author_list_out = [x.split(' ') if '.' in x else x for x in author_list_out]  # split on remaining spaces
-                author_list_out = flatten(author_list_out)  # flatten list
-            # fix name ordering
-            initials = [' '.join(y).strip() for y in
-                        [re.findall(r'([A-Z]\. |[A-Z] |[A-Z]\.)', x) for x in author_list_out]]
-            noninitials = [re.sub(r'([A-Z]\. |[A-Z] |[A-Z]\.)', '', x).strip().replace(',', '')
-                           for x in author_list_out]
-            author_list_out2 = []
-            author_list_display_out = []
-            i, j = 0, 0
-            for initial, name in zip(initials, noninitials):
-                if i < len(noninitials) and j < len(initials):
-                    # set initial and name positions
-                    name = noninitials[i]
-                    initial = initials[j]
-                    # clean initials and names
-                    initial = initial.strip().replace('  ', ' ')
-                    name = name.strip().replace('  ', '')
-                    if name == '' or initial == '':  # if either is empty, we may need to do some kind of merge
-                        if name == '':  # indicates a merge is needed
-                            i += 1  # name looks ahead
-                            name = noninitials[i]
-                            if i < len(initials):
-                                if initials[i] == '':
-                                    j += 1  # skip the next initial
-                        elif initial == '' and j+1 < len(noninitials):  # indicates a merge may be needed
-                            if noninitials[j+1] == '':  # indicates a merge is needed
-                                j += 1  # initial looks ahead
-                                initial = initials[j]
-                                i += 1  # skip the next name
-                        else:  # indicates no initials for name (we assume we never have initials without surname)
-                            initial = ''
-                    if initial != '':
-                        namelength = len([x for x in name.split(' ') if x not in ['de', 'van', 'van de']])
-                        lowercaseSurnameExists = len(name.split(' ')) != namelength  # lower case surname exists
-                        if namelength == 1:  # one word name; e.g., Dowdy
-                            insert_position = 0
-                        elif namelength > 1 and not lowercaseSurnameExists:  # more than one word in name; e.g., Nick Dowdy
-                            insert_position = re.search(r'[a-z] [A-Z]', name).span()[0] + 1
-                        else:  # more than one word in name; e.g., Nick van Dowdy
-                            insert_position = re.search(r'[a-z] [a-z]', name).span()[0] + 1
-                        author_list_out2.append((name[0:insert_position] + ' ' + initial + ' ' + name[insert_position:]).replace('  ', ' ').strip())
-                        author_list_display_out.append((name[0:insert_position] +
-                                                       ' ' + initial.replace(' ', '') + ' ' + name[insert_position:]).replace('  ', ' ').strip())
-                    else:
-                        author_list_out2.append(name)
-                        author_list_display_out.append(name)
-                    i += 1
-                    j += 1
-            author_list_out = author_list_out2
-            author_list_display = author_list_display_out
-            number_of_authors = len([x for x in author_list_out if x])  # This was moved one line down
-            # if number_of_authors != 0:
-            #     # fix out of order surnames and first name initials
-            #     i, j = 0, 0
-            #     author_list_out2 = []
-            #     last_i_merged = False
-            #     forward_merged = False
-            #     for author in author_list_out:
-            #         # author = author_list_out[i]  # for testing
-            #         if not forward_merged:
-            #             if re.search(r'[A-Z]\. [A-Z]$|[A-Z]\. [A-Z]\.$', author.strip()) and \
-            #                     not last_i_merged:  # if initials only AND last was not merged, look behind
-            #                 out = (author + '. ' + author_list_out[i - 1]). \
-            #                     replace('..', '.')  # look backwards for merge
-            #                 author_list_out2 = author_list_out2[0:(j - 1)]
-            #                 last_i_merged = True
-            #                 j -= 1
-            #             elif re.search(r'[A-Z]\. [A-Z]$|[A-Z]\. [A-Z]\.$', author.strip()) and \
-            #                     last_i_merged:  # if initials only AND last was merged, look ahead
-            #                 out = author + '. ' + author_list_out[i + 1]  # look forwards for merge
-            #                 author_list_out2 = author_list_out2[0:(j + 1)]
-            #                 last_i_merged = False
-            #                 forward_merged = True
-            #             else:  # if not initials only
-            #                 out = author
-            #                 last_i_merged = False
-            #             author_list_out2.append(out)
-            #             i += 1
-            #             j += 1
-            #         else:
-            #             i += 1
-            #             forward_merged = False
-            #             last_i_merged = True
-            #         # print(author_list_out2)
-            #     author_list_out = author_list_out2
-            # number_of_authors = len([x for x in author_list_out if x])  # Must be recalculated after above loop
-            # if any([re.search('[A-Z]\. ', x) for x in author_list_out]):
-            #     surnames = [re.sub(r'(.*)(\s)', '\\2', x) for x in author_list_out]
-            #     i = 0
-            #     author_list_display = []
-            #     for author in author_list_out:
-            #         author_list_display.append(author.replace(surnames[i], '').replace('. ', '.') + surnames[i])
-            #         i += 1
-            # else:
-            #     author_list_display = author_list_out
-        else:
+                extra_author_info = ''
+            authors = re.sub(r' and | y | & ', r', ', authors)  # replace 'and', 'y', and '&' with ','
+            authors = re.sub(r' PhD\.| Esq\.|, PhD\.|, Esq\.| MD\.| MS\.|, MD\.|, MS\.', r'', authors)  # remove honorary titles
+            authors = re.sub(r',( Jr.*?| Sr.*?| I.*?| V.*?)$', r'\1', authors)  # protect generational titles
+            if authors[-2:] in ['Jr', 'Sr']:  # ensure these titles end with '.'
+                authors = authors + '.'
+            authors = authors.replace(',,', ',')  # remove extra commas that may exist
+            et_al_exists = re.search(r', et al*.?| et al*.?', authors)
+            if et_al_exists:
+                et_al_exists = True
+                authors = re.sub(r', et al*.?| et al*.?', '', authors)
+            ## Anticipated problem: ',' could separate names, initials, or titles like 'Lastname, Jr.', 'Lastname, III'
+            if ',' in authors:  # if commas exist, we assume the names and initials are comma-separated
+                author_list = [x.strip() for x in authors.split(',') if x]  # separate on commas, ignoring empty strings
+            else:
+                author_list = [authors]
+            temp_author_list = []
+            for author in author_list:  # CHECKS FOR ASA FORMATTED AUTHORS
+                out_of_order = re.search(r' [A-Z]\.$| [A-Z]$', author)  # names end in trailing initials
+                if out_of_order:  # if a name is out of order
+                    previous_name = temp_author_list[-1]  # store previous name
+                    temp_author_list = temp_author_list[0:-1]  # remove the previous name
+                    new_name = author.strip() + ' ' + previous_name.strip()  # merge current name with previous name
+                    temp_author_list.append(new_name)  # append new name to the list of authors
+                else:  # if a name is not out of order
+                    temp_author_list.append(author)  # append the name to the list of authors
+            author_list = temp_author_list
+            temp_author_list = []
+            for author in author_list:  # CHECKS FOR APA FORMATTED AUTHORS
+                # names containing initials ONLY
+                out_of_order = re.search(r'^([A-Z]\.)+$|^([A-Z] )+$|^([A-Z]\. )+(?!.*[a-z])', author)
+                if out_of_order:  # if a name is out of order
+                    surname = temp_author_list[-1]  # store previous name
+                    temp_author_list = temp_author_list[0:-1]  # remove the previous name
+                    initials = re.sub(r'([A-Z])\.', '\\1. ', author)  # place '. ' between each initial
+                    new_name = initials.strip() + ' ' + surname.strip()  # merge current name with previous name
+                    temp_author_list.append(new_name)  # append new name to the list of authors
+                else:  # if a name is not out of order
+                    temp_author_list.append(author)  # append the name to the list of authors
+            author_list = temp_author_list
+            temp_author_list = []
+            for author in author_list:  # CHECKS FOR AMA FORMATTED AUTHORS
+                trailing = re.search(r'( Jr.*?| Sr.*?| I.*?| V.*?)$', author)
+                if trailing:
+                    suffix = author[trailing.span()[0]:trailing.span()[1]]
+                    author = author[0:trailing.span()[0]]
+                else:
+                    suffix = ''
+                out_of_order = re.search(r' [A-Z]+$', author)  # names end in multiple trailing initials
+                if out_of_order:  # if a name is out of order
+                    initials = ' '.join(author.split(' ')[1:])  # grab initials
+                    initials = re.sub(r'([A-Z])', '\\1. ', initials)  # place '. ' between each initial
+                    surname = author.split(' ')[0]  # grab surname
+                    new_name = initials.strip() + ' ' + surname.strip() + suffix  # merge initials and surname
+                    temp_author_list.append(new_name)  # append new name to the list of authors
+                else:  # if a name does not contain elements out of order
+                    temp_author_list.append(author + suffix)  # append the name to the list of authors
+            author_list = temp_author_list
+            number_of_authors = len(author_list)
+            author_list = [re.sub(r'( Jr.*?| Sr.*?| I.*?| V.*?)$', ',\\1', x) for
+                           x in author_list]  # comma-separate generational titles
+            author_list_out = author_list
+            author_list_display = [re.sub(r'(van |de |van de )', upper_repl, x) for x in  # protect prefixes from next
+                                   author_list_out]  # (I couldn't figure out the correct regex for this)
+            author_list_display = [re.sub(r'([a-z]+)(?!.*^) ', r'. ', x) for x in
+                                   author_list_display]  # collapse non-surnames to an initial (does not handle prefix)
+            author_list_display = [re.sub(r'(\. (?![A-Z][a-z])+)', r'.', x) for x in
+                                   author_list_display]  # remove space between initials
+            author_list_display = [re.sub(r'(VAN |DE |VAN DE )', lower_repl, x) for x in
+                                   author_list_display]  # unprotect prefixes
+            if et_al_exists:
+                number_of_authors = 25  # arbitrarily large value to trigger 'et al' in citation_out
+        else:  # if an author string does not exist
             number_of_authors = 0
             author_list_out = ['']
             author_list_display = ['']
+        # GENERATE AUTHOR STRING TO DISPLAY IN OUTPUT
         if number_of_authors == 0:
             citation_out = 'Unknown, ' + year_out_print
         elif number_of_authors == 1:
-            citation_out = author_list_display[0] + ', ' + year_out_print
+            citation_out = author_list_display[0] + extra_author_info + ', ' + year_out_print
         elif number_of_authors == 2:
             citation_out = ', '.join(author_list_display[0:-1]) + ' and ' + author_list_display[
-                -1] + ', ' + year_out_print
+                -1] + extra_author_info + ', ' + year_out_print
         elif number_of_authors == 3:
             citation_out = ', '.join(author_list_display[0:-1]) + ', and ' + author_list_display[
-                -1] + ', ' + year_out_print
+                -1] + extra_author_info + ', ' + year_out_print
         else:
-            citation_out = author_list_display[0] + ' et al., ' + year_out_print
+            citation_out = author_list_display[0] + ' et al.' + extra_author_info + ', ' + year_out_print  #
     else:
         author_list_out, year_out, citation_out, publication_notes_out, bracketed_date_out = [''], '', '', '', False
     return author_list_out, year_out, citation_out, publication_notes_out, bracketed_date_out
