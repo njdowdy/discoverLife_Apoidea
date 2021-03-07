@@ -157,32 +157,31 @@ def publication_parser(mypub):
             authors = mypub[0:year_start_index].strip()  # authors are publication string up to location of year
             authors = re.sub(r',$', r'', authors)  # remove trailing ','
             authors = re.sub(r'([A-Z])\.', r'\1. ', authors).replace('  ', ' ')  # put a space between initials
-            if ' in ' in authors:
+            if ' in ' in authors:  # if author string matches 'taxonomy specific' style
                 extra_author_info = re.search(r'( in .*)', authors)[0]  # capture 'in ...' text separately
-                if extra_author_info[0] != ' ':
-                    extra_author_info = ' ' + extra_author_info
-                if extra_author_info[-1] == ' ':
-                    extra_author_info = extra_author_info[0:-1]
-                authors = re.sub(extra_author_info, '', authors)
+                if extra_author_info[0] != ' ':  # if extra author info does not start with ' '
+                    extra_author_info = ' ' + extra_author_info  # ensure extra author info starts with ' '
+                if extra_author_info[-1] == ' ':  # if extra author info does not end with ' '
+                    extra_author_info = extra_author_info[0:-1]  # ensure extra author info ends with ' '
+                authors = re.sub(extra_author_info, '', authors)  # remove extra author info
                 extra_author_info = re.sub(r'\b( et al).*', ',\\1.', extra_author_info)  # ensure 'et al' is formatted
-            else:
-                extra_author_info = ''
+            else:  # if author string does not match 'taxonomy specific' style
+                extra_author_info = ''  # there is no extra author info
             authors = re.sub(r' and | y | & ', r', ', authors)  # replace 'and', 'y', and '&' with ','
             authors = re.sub(r' PhD\.| Esq\.|, PhD\.|, Esq\.| MD\.| MS\.|, MD\.|, MS\.', r'', authors)  # remove honorary titles
             authors = re.sub(r',( Jr.*?| Sr.*?| I.*?| V.*?)$', r'\1', authors)  # protect generational titles
             if authors[-2:] in ['Jr', 'Sr']:  # ensure these titles end with '.'
                 authors = authors + '.'
             authors = authors.replace(',,', ',')  # remove extra commas that may exist
-            et_al_exists = re.search(r', et al*.?| et al*.?', authors)
-            if et_al_exists:
-                et_al_exists = True
-                authors = re.sub(r', et al*.?| et al*.?', '', authors)
-            ## Anticipated problem: ',' could separate names, initials, or titles like 'Lastname, Jr.', 'Lastname, III'
+            et_al_exists = re.search(r', et al*.?| et al*.?', authors)  # check if variants of 'et al' exist
+            if et_al_exists:  # if variants of 'et al' present
+                et_al_exists = True  # set et_al_exists to True
+                authors = re.sub(r', et al*.?| et al*.?', '', authors)  # remove 'et al' variant from author string
             if ',' in authors:  # if commas exist, we assume the names and initials are comma-separated
                 author_list = [x.strip() for x in authors.split(',') if x]  # separate on commas, ignoring empty strings
-            else:
-                author_list = [authors]
-            temp_author_list = []
+            else:  # assume only one author exists (does not exclude ' '-separated authors; difficult to deal with)
+                author_list = [authors]  # place single author into a list
+            temp_author_list = []  # generate new temp list
             for author in author_list:  # CHECKS FOR ASA FORMATTED AUTHORS
                 out_of_order = re.search(r' [A-Z]\.$| [A-Z]$', author)  # names end in trailing initials
                 if out_of_order:  # if a name is out of order
@@ -192,8 +191,8 @@ def publication_parser(mypub):
                     temp_author_list.append(new_name)  # append new name to the list of authors
                 else:  # if a name is not out of order
                     temp_author_list.append(author)  # append the name to the list of authors
-            author_list = temp_author_list
-            temp_author_list = []
+            author_list = temp_author_list  # write out temporary result to author_list
+            temp_author_list = []  # generate new temp list
             for author in author_list:  # CHECKS FOR APA FORMATTED AUTHORS
                 # names containing initials ONLY
                 out_of_order = re.search(r'^([A-Z]\.)+$|^([A-Z] )+$|^([A-Z]\. )+(?!.*[a-z])', author)
@@ -205,29 +204,29 @@ def publication_parser(mypub):
                     temp_author_list.append(new_name)  # append new name to the list of authors
                 else:  # if a name is not out of order
                     temp_author_list.append(author)  # append the name to the list of authors
-            author_list = temp_author_list
-            temp_author_list = []
+            author_list = temp_author_list  # write out temporary result to author_list
+            temp_author_list = []  # generate new temp list
             for author in author_list:  # CHECKS FOR AMA FORMATTED AUTHORS
-                trailing = re.search(r'( Jr.*?| Sr.*?| I.*?| V.*?)$', author)
-                if trailing:
-                    suffix = author[trailing.span()[0]:trailing.span()[1]]
-                    author = author[0:trailing.span()[0]]
-                else:
-                    suffix = ''
+                trailing = re.search(r'( Jr.*?| Sr.*?| I.*?| V.*?)$', author)  # contains generational title
+                if trailing:  # if generation title exists
+                    suffix = author[trailing.span()[0]:trailing.span()[1]]  # separate generational title
+                    author = author[0:trailing.span()[0]]  # remove generational title
+                else:  # if generational title does not exist
+                    suffix = ''  # do not add anything as a suffix
                 out_of_order = re.search(r' [A-Z]+$', author)  # names end in multiple trailing initials
                 if out_of_order:  # if a name is out of order
                     initials = ' '.join(author.split(' ')[1:])  # grab initials
                     initials = re.sub(r'([A-Z])', '\\1. ', initials)  # place '. ' between each initial
                     surname = author.split(' ')[0]  # grab surname
-                    new_name = initials.strip() + ' ' + surname.strip() + suffix  # merge initials and surname
+                    new_name = initials.strip() + ' ' + surname.strip() + suffix  # merge initials, surname, and suffix
                     temp_author_list.append(new_name)  # append new name to the list of authors
                 else:  # if a name does not contain elements out of order
-                    temp_author_list.append(author + suffix)  # append the name to the list of authors
-            author_list = temp_author_list
-            number_of_authors = len(author_list)
+                    temp_author_list.append(author + suffix)  # append the name and suffix to the list of authors
+            author_list = temp_author_list  # write out temporary result to author_list
+            number_of_authors = len(author_list)  # calculate final number of authors
             author_list = [re.sub(r'( Jr.*?| Sr.*?| I.*?| V.*?)$', ',\\1', x) for
                            x in author_list]  # comma-separate generational titles
-            author_list_out = author_list
+            author_list_out = author_list  # write out result into author_list_out
             author_list_display = [re.sub(r'(van |de |van de )', upper_repl, x) for x in  # protect prefixes from next
                                    author_list_out]  # (I couldn't figure out the correct regex for this)
             author_list_display = [re.sub(r'([a-z]+)(?!.*^) ', r'. ', x) for x in
@@ -236,26 +235,26 @@ def publication_parser(mypub):
                                    author_list_display]  # remove space between initials
             author_list_display = [re.sub(r'(VAN |DE |VAN DE )', lower_repl, x) for x in
                                    author_list_display]  # unprotect prefixes
-            if et_al_exists:
+            if et_al_exists:  # if input mypub has 'et al' in author string
                 number_of_authors = 25  # arbitrarily large value to trigger 'et al' in citation_out
         else:  # if an author string does not exist
-            number_of_authors = 0
-            author_list_out = ['']
-            author_list_display = ['']
+            number_of_authors = 0  # the number of authors is zero
+            author_list_out = ['']  # capture authors as an empty string stored in a list
+            author_list_display = ['']  # display authors as an empty string stored in a list
         # GENERATE AUTHOR STRING TO DISPLAY IN OUTPUT
-        if number_of_authors == 0:
+        if number_of_authors == 0:  # if no authors
             citation_out = 'Unknown, ' + year_out_print
-        elif number_of_authors == 1:
+        elif number_of_authors == 1:  # if one author
             citation_out = author_list_display[0] + extra_author_info + ', ' + year_out_print
-        elif number_of_authors == 2:
+        elif number_of_authors == 2:  # if two authors
             citation_out = ', '.join(author_list_display[0:-1]) + ' and ' + author_list_display[
                 -1] + extra_author_info + ', ' + year_out_print
-        elif number_of_authors == 3:
+        elif number_of_authors == 3:  # if three authors
             citation_out = ', '.join(author_list_display[0:-1]) + ', and ' + author_list_display[
                 -1] + extra_author_info + ', ' + year_out_print
-        else:
+        else:  # if four or more authors
             citation_out = author_list_display[0] + ' et al.' + extra_author_info + ', ' + year_out_print  #
-    else:
+    else:  # no publication was passed
         author_list_out, year_out, citation_out, publication_notes_out, bracketed_date_out = [''], '', '', '', False
     return author_list_out, year_out, citation_out, publication_notes_out, bracketed_date_out
 
