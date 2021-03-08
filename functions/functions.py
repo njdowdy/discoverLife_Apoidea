@@ -61,6 +61,16 @@ def unicode_name_fix(line_in, parent_id_in):
     return line_out, log_out
 
 
+def capitalize_repl(match):
+    match = match.group(1)
+    if match[0] == ' ':
+        match = match[1:]
+        match_reformatted = ' ' + match.capitalize()
+    else:
+        match_reformatted = match.capitalize()
+    return match_reformatted
+
+
 def upper_repl(match):
     return match.group(1).upper()
 
@@ -167,16 +177,49 @@ def publication_parser(mypub):
                 extra_author_info = re.sub(r'\b( et al).*', ',\\1.', extra_author_info)  # ensure 'et al' is formatted
             else:  # if author string does not match 'taxonomy specific' style
                 extra_author_info = ''  # there is no extra author info
-            authors = re.sub(r' and | y | & ', r', ', authors)  # replace 'and', 'y', and '&' with ','
-            authors = re.sub(r' PhD\.| Esq\.|, PhD\.|, Esq\.| MD\.| MS\.|, MD\.|, MS\.', r'', authors)  # remove honorary titles
-            authors = re.sub(r',( Jr.*?| Sr.*?| I.*?| V.*?)$', r'\1', authors)  # protect generational titles
+            authors = re.sub(r' PhD\.|, PhD\.| PhD,|, PhD,| PhD$|, PhD$| PHD\.|, PHD\.| PHD,|, PHD,| PHD$|, PHD$|'
+                             r' Esq\.|, Esq\.| Esq,|, Esq,| Esq$|, Esq$| ESQ\.|, ESQ\.| ESQ,|, ESQ,| ESQ$|, ESQ$|'
+                             r' MD\.| MD,| MD$|, MD\.|, MD,|, MD$|'
+                             r', MS\.| MS\.| MS$| MS,|, MS,|, MS$', r'', authors)  # remove honorary titles
+            authors = re.sub(r',( Jr.*?| JR.*?| Sr.*?| SR.*?)$', capitalize_repl, authors)  # protect generational titles
+            authors = re.sub(r',( I.*?| V.*?)$', '\\1', authors)  # protect generational titles
             if authors[-2:] in ['Jr', 'Sr']:  # ensure these titles end with '.'
                 authors = authors + '.'
-            authors = authors.replace(',,', ',')  # remove extra commas that may exist
             et_al_exists = re.search(r', et al*.?| et al*.?', authors)  # check if variants of 'et al' exist
             if et_al_exists:  # if variants of 'et al' present
                 et_al_exists = True  # set et_al_exists to True
                 authors = re.sub(r', et al*.?| et al*.?', '', authors)  # remove 'et al' variant from author string
+            # if there are commas in author string and no 'and'-type character somewhere
+            if ',' not in authors:
+                style = 'NON-MLA'
+            elif ',' in authors and not re.search(r' and | y | & ', authors):
+                style = 'MLA'  # these conditions indicate MLA-style
+            # else, if the number of commas before ', and ...' is equal to 1
+            # and any names before ', and ...' end in a space-separated initial
+            elif len(re.findall(r',', re.sub(r', and.*', '', authors).strip())) == 1 and any(
+                    [re.search(r'[a-z] [A-Z]$|[a-z] [A-Z]\.$', x) for
+                     x in re.sub(r', and.*', '', authors).strip().split(',')]):
+                style = 'MLA'  # these conditions indicate MLA-style
+            elif len(re.findall(r',', re.sub(r', and.*', '', authors).strip())) == 1 and not any(
+                    [re.search(r'[a-z] [A-Z]$|[a-z] [A-Z]\.$', x) for
+                     x in re.sub(r', and.*', '', authors).strip().split(',')]):
+                style = 'NON-MLA'  # these conditions indicate NON MLA-style
+            else:  # else, it is ambiguous
+                # Authora, Firstnamea Middlenamea, and Firstnameb Authorb  # spelled-out middlename could be MLA
+                # Authora, Lasname1 Lastname2, and Firstnameb Authorb  # non-hyphenated lastname could be non-MLA
+                #
+                # Authora, Firstnamea, and Authorb  # could be MLA
+                # Authora, Authorb, and Authorc  # could be non-MLA
+                style = 'AMBIGUOUS'
+            if style == 'AMBIGUOUS':
+                print('WARNING: AUTHOR STRING MAY BE AMBIGUOUSLY FORMATTED!')
+            authors = re.sub(r' and | y | & ', r', ', authors)  # replace 'and', 'y', and '&' with ','
+            authors = authors.replace(',,', ',')  # remove extra commas that may exist
+            if style == 'MLA':  # if the style is MLA format
+                authors_temp = authors.split(',')  # split author string by commas
+                # convert authors from MLA to non-MLA format
+                new_first_author = [authors_temp[1].strip() + ' ' + authors_temp[0].strip()]
+                authors = ', '.join(new_first_author + [x.strip() for x in authors_temp[2:]])
             if ',' in authors:  # if commas exist, we assume the names and initials are comma-separated
                 author_list = [x.strip() for x in authors.split(',') if x]  # separate on commas, ignoring empty strings
             else:  # assume only one author exists (does not exclude ' '-separated authors; difficult to deal with)
@@ -192,6 +235,7 @@ def publication_parser(mypub):
                 else:  # if a name is not out of order
                     temp_author_list.append(author)  # append the name to the list of authors
             author_list = temp_author_list  # write out temporary result to author_list
+            # TRY ALL FORMATS AND COMPARE RESULTS TO SEE IF ANY AGREE OR OBVIOUSLY BREAK SOME RULES?
             temp_author_list = []  # generate new temp list
             for author in author_list:  # CHECKS FOR APA FORMATTED AUTHORS
                 # names containing initials ONLY
@@ -239,6 +283,7 @@ def publication_parser(mypub):
                 number_of_authors = 25  # arbitrarily large value to trigger 'et al' in citation_out
         else:  # if an author string does not exist
             number_of_authors = 0  # the number of authors is zero
+            extra_author_info = ''
             author_list_out = ['']  # capture authors as an empty string stored in a list
             author_list_display = ['']  # display authors as an empty string stored in a list
         # GENERATE AUTHOR STRING TO DISPLAY IN OUTPUT

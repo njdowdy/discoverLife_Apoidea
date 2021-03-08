@@ -19,6 +19,10 @@ from functions import functions
 # 6.     "Abbot, Alexander Cash, and Conner. 2000" - 3 authors
 # 7.     "Abbot Alexander Cash and Conner. 2000" - 2 authors
 # 8.     etc, etc
+# Some formats cannot be distinguished in some cases:
+# Example:
+# Authora, Firstnamea, and Authorb # MLA FORMAT
+# Authora,    Authorb, and Authorc # APA/other FORMAT
 
 
 class Test(TestCase):
@@ -100,15 +104,18 @@ class Test(TestCase):
         #                                               ' Authord, G. H., & Authore, I., 2000'))
 
     def test_publication_mla_commas(self):  # MLA Style, comma-separated authors/initials
-        self.assertEqual((['Firstnamea Authora'], '2000', 'Firstnamea A. Authora, 2000', '', False),
+        self.assertEqual((['Firstnamea Authora'], '2000', 'F. Authora, 2000', '', False),
                          functions.publication_parser('Authora, Firstnamea, 2000'))
         self.assertEqual((['Firstnamea Middlenamea Authora'], '2000', 'F.M. Authora, 2000', '', False),
                          functions.publication_parser('Authora, Firstnamea Middlenamea, 2000'))
         self.assertEqual((['Firstnamea A. Authora'], '2000', 'F.A. Authora, 2000', '', False),
                          functions.publication_parser('Authora, Firstnamea A., 2000'))
-        self.assertEqual((['Firstnamea Authora', 'Firstnameb Authorb'], '2000',
-                          'F. Authora and F. Authorb, 2000', '', False),
-                         functions.publication_parser('Authora, Firstnamea, and Firstnameb Authorb, 2000'))
+        self.assertEqual((['Firstnamea A. Authora', 'Firstnameb Authorb'], '2000',
+                          'F.A. Authora and F. Authorb, 2000', '', False),
+                         functions.publication_parser('Authora, Firstnamea A., and Firstnameb Authorb, 2000'))
+        self.assertEqual((['Firstnamea A. Authora'], '2000',
+                          'F.A. Authora et al., 2000', '', False),
+                         functions.publication_parser('Authora, Firstnamea A., et al., 2000'))
 
     def test_publication_ieee_commas(self):  # IEEE Style, comma-separated authors/initials
         self.assertEqual((['A. B. C. Authora, III'], '2000', 'A.B.C. Authora, III, 2000', '', False),
@@ -117,6 +124,10 @@ class Test(TestCase):
                          functions.publication_parser('A. B. C. Authora, Jr., 2000'))
         self.assertEqual((['A. B. C. Authora, Jr.'], '2000', 'A.B.C. Authora, Jr., 2000', '', False),
                          functions.publication_parser('A. B. C. Authora, Jr, 2000'))
+        self.assertEqual((['A. B. C. Authora, Jr.'], '2000', 'A.B.C. Authora, Jr., 2000', '', False),
+                         functions.publication_parser('A. B. C. Authora, JR, 2000'))
+        self.assertEqual((['A. B. C. Authora'], '2000', 'A.B.C. Authora, 2000', '', False),
+                         functions.publication_parser('A. B. C. Authora, PhD, 2000'))
         self.assertEqual((['A. B. Authora', 'C. D. Authorb'], '2000', 'A.B. Authora and C.D. Authorb, 2000', '', False),
                          functions.publication_parser('A. B. Authora and C. D. Authorb, 2000'))
         self.assertEqual((['A. B. Authora', 'C. D. Authorb', 'E. F. Authorc'], '2000',
