@@ -137,7 +137,7 @@ def publication_parser(mypub):
             year_start_index = year_exists.span()[0]
             year_end_index = year_exists.span()[1]
             year_out = mypub[year_start_index:year_end_index]
-            bracketed_date_exists = re.search(rf'\[{year_out}\]', mypub)
+            bracketed_date_exists = re.search(rf'\[{year_out}]', mypub)
             mypub = mypub.replace('[', '').replace(']', '')
             if bracketed_date_exists:
                 bracketed_date_out = True
@@ -161,8 +161,7 @@ def publication_parser(mypub):
                 year_start_index = len(mypub)
                 authors_exist = True  # if no notes, no year, but pub exists, authors must exist
             bracketed_date_out = False
-            year_separated_by_comma = True
-        ### AUTHOR PARSING STARTS HERE
+        # AUTHOR PARSING STARTS HERE
         if authors_exist:  # if an author string exists
             authors = mypub[0:year_start_index].strip()  # authors are publication string up to location of year
             authors = re.sub(r',$', r'', authors)  # remove trailing ','
@@ -181,7 +180,7 @@ def publication_parser(mypub):
                              r' Esq\.|, Esq\.| Esq,|, Esq,| Esq$|, Esq$| ESQ\.|, ESQ\.| ESQ,|, ESQ,| ESQ$|, ESQ$|'
                              r' MD\.| MD,| MD$|, MD\.|, MD,|, MD$|'
                              r', MS\.| MS\.| MS$| MS,|, MS,|, MS$', r'', authors)  # remove honorary titles
-            authors = re.sub(r',( Jr.*?| JR.*?| Sr.*?| SR.*?)$', capitalize_repl, authors)  # protect generational titles
+            authors = re.sub(r',( Jr.*?| JR.*?| Sr.*?| SR.*?)$', capitalize_repl, authors)  # protect generational title
             authors = re.sub(r',( I.*?| V.*?)$', '\\1', authors)  # protect generational titles
             if authors[-2:] in ['Jr', 'Sr']:  # ensure these titles end with '.'
                 authors = authors + '.'
@@ -193,7 +192,12 @@ def publication_parser(mypub):
             if ',' not in authors:
                 style = 'NON-MLA'
             elif ',' in authors and not re.search(r' and | y | & ', authors):
-                style = 'MLA'  # these conditions indicate MLA-style
+                # Authora AB, Authorb AB, year  # AMA-style (assume AMA MUST have author initials)
+                # Authora, Firstname AB, year  # MLA-style
+                if ' ' in authors.split(',')[0]:
+                    style = 'NON-MLA'  # these conditions indicate AMA-style
+                else:
+                    style = 'MLA'  # these conditions can indicate MLA-style
             # else, if the number of commas before ', and ...' is equal to 1
             # and any names before ', and ...' end in a space-separated initial
             elif len(re.findall(r',', re.sub(r', and.*', '', authors).strip())) == 1 and any(
