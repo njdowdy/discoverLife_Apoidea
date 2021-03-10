@@ -35,11 +35,11 @@ for line in data[0]:
             genus, genus_notes = functions.name_note_extractor(functions.genus_extractor(name))
             species, species_notes = functions.name_note_extractor(functions.species_extractor(name))
             subgenus, subgenus_notes = functions.name_note_extractor(functions.subgenus_extractor(genus, species, name))
-            subspecies, subspecies_notes = functions.name_note_extractor(functions.subspecies_extractor(species, name))  # TODO: Still failing in multi-authored names, author strings with 'and', 'var',
+            subspecies, subspecies_notes = functions.name_note_extractor(functions.subspecies_extractor(species, name))
             canonical_name = functions.to_canonical(genus, species)
             pub_data = functions.publication_extractor(name)
-            author_list, year, citation, publication_notes, bracketed_date = functions.publication_parser(
-                pub_data)  # TODO: Some authors are weird and need to be checked; encoding problems exist
+            original_publication_data, author_list, year, citation, publication_notes, bracketed_date =\
+                functions.publication_parser(pub_data)
             # if publication_notes contains 'valid subspecies', raise status to 'accepted'
             accepted_subspecies = ''
             if 'valid subspecies' in publication_notes:
@@ -70,6 +70,7 @@ for line in data[0]:
                 'subspecies_notes': subspecies_notes,
                 'publication': citation,
                 'publication_notes': publication_notes,
+                'verbatim_publication': original_publication_data,
                 'verbatim_name': name.strip(),
                 'source': 'Discover Life'
             }
@@ -88,4 +89,3 @@ functions.write_data(names_out_list, names_output_file)  # write parsed data
 running_author_list.sort()  # alphabetical sort of running author list
 functions.write_data(running_author_list, author_output_file)  # write author list
 functions.write_data(change_log, log_file)  # write out log file
-

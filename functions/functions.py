@@ -1,14 +1,25 @@
 import pandas as pd
 import re
-
+from helpers.pLl import pLl
 
 # define custom functions
+
 
 def apply_manual_fixes(data):
     data[0][1401] = '\xa0\xa0\xa0Andrena takachihoi\xa0Hirashima, 1964, emend.' \
                     '\xa0--\xa0Andrena (Euandrena) takachihsi\xa0' \
                     'Hirashima, 1964, incorrect original spelling in species heading'
     return data
+
+
+def encoding_fix(author_in):
+    author_out = re.sub(r'Reb.lo', 'Rebêlo', author_in)
+    author_out = re.sub(r'Sep.lveda', 'Sepúlveda', author_out)
+    author_out = re.sub(r'Qui.onez', 'Quiñonez', author_out)
+    author_out = re.sub(r'J.nior', 'Júnior', author_out)
+    author_out = re.sub(r'Y..ez', 'Yáñez', author_out)
+    author_out = re.sub(r'Ord..ez', 'Ordóñez', author_out)
+    return author_out
 
 
 def read_data(names_file):
@@ -43,7 +54,14 @@ def unicode_name_fix(line_in, parent_id_in):
     line_out = line_out.replace('Andrena cingulata auct , not Fabricius', 'Andrena cingulata_auct,_not_Fabricius')
     line_out = line_out.replace('argentata auct, not Fabricius, 1793', 'argentata_auct_not_Fabricius,_1793')
     line_out = line_out.replace('subspecies Dieunomia', 'subspecies;\xa0Dieunomia')
-
+    line_out = line_out.replace('hypochrysea\xa0Rohweri Cockerell, 1907',
+                                'hypochrysea\xa0rohweri Cockerell, 1907, author requires verification - NJD')
+    line_out = line_out.replace('Prosopis Bequaerti Schrottky, 1910',
+                                'Prosopis bequaerti Schrottky, 1910, author requires verification - NJD')
+    line_out = line_out.replace('Halictus flavopunctatus\xa0(Halictus, 1924)',
+                                'Halictus flavopunctatus\xa0(Friese, 1924), author requires verification - NJD')
+    line_out = line_out.replace('(Tkalců, valid subspecies, 1979)', '(Tkalců, 1979), valid subspecies')
+    line_out = line_out.replace('Megachile Megachile (Austromegachile)', 'Megachile (Austromegachile)')
     # log which lines got changed for manual verification!
     if line_out != line_in:
         log_out = {
@@ -87,6 +105,8 @@ def genus_extractor(record):
 def species_extractor(record):
     species_exists = [x for x in record.split(' ') if re.match(r'^[a-z]', x) or
                       re.search(r'^[A-Z]-', x) or re.search(r'^[0-9]-', x)]
+    # TODO: above does not seem to be working for: Allodape T-insignita Strand, 1912
+    # TODO: above does not seem to be working for:  Anthophora T-insignata Strand, 1913, invalid symbol
     species_exists = [x for x in species_exists if '(' not in x and ')' not in x]  # handles (Subgenus [text])
     if species_exists:
         species_out = species_exists[0]
@@ -102,7 +122,7 @@ def subspecies_extractor(species_in, record):
         # if subspecies_exists and len(subspecies_exists[0].split(' ')) == 1:
         subspecies_out = subspecies_exists[0].replace('(', '').replace(')', '')
     elif subspecies_exists:
-        subspecies_out = ''  # not sure how to handle something like: 'Andrena cingulata auct , not Fabricius'
+        subspecies_out = ''
     else:
         subspecies_out = ''
     return subspecies_out
@@ -112,9 +132,12 @@ def subgenus_extractor(genus_in, species_in, record):
     subgenus_exists = re.findall(fr'{genus_in} (.*?) {species_in}', record)
     if subgenus_exists:
         subgenus_out = subgenus_exists[0].replace('(', '').replace(')', '')
-        # if contains 'sl' change to a subgenus note of 'sensu latu'
-        if ' sl' in subgenus_out:
-            subgenus_out = subgenus_out.replace(' sl', '_sl')
+        # if contains 'sl' change to a subgenus note of 'sensu lato'
+        if ' sl' in subgenus_out or 's l' in subgenus_out:
+            subgenus_out = subgenus_out.replace(' sl', '_sl').replace('s l', '_sl')
+        # if contains 'vel' change to a subgenus note of 'vel*'
+        if ' vel' in subgenus_out:
+            subgenus_out = re.sub(r' (vel) (.*)', '_\\1_\\2', subgenus_out)
     else:
         subgenus_out = ''
     return subgenus_out
@@ -131,9 +154,21 @@ def publication_extractor(record):
 
 
 def publication_parser(mypub):
+    original_pub = mypub
+    mypub = encoding_fix(mypub)
     if mypub:  # if a publication was passed
-        year_exists = re.search(r'[0-9][0-9][0-9][0-9]', mypub)  # find position of year, if it exists
-        if year_exists:  # if a year exists in publication
+        # find position of year, if it exists; ignore any year-like substrings after 'Auctorum'
+        year_exists = re.search(r'[0-9][0-9][0-9][0-9]', mypub.split('Auctorum')[0])
+        question_exists = re.search(r'\?\?\?\?', mypub)  # test if '????' exists
+        auct_at_start = re.search(r'^[Aa]uct', mypub)  # test if pub starts with Auct or auct
+        if auct_at_start:
+            mypub = re.sub(r'^[Aa](uct)( |\. |, |orum |orum, |orum )(.*)|^[Aa]uct.*',
+                           'Unknown, ????, auct. \\3', mypub)
+            question_exists = re.search(r'\?\?\?\?', mypub)
+        auctorum_exists = re.search(r'Auctorum', mypub)  # test if 'Auctorum' exists anywhere
+        if auctorum_exists:  # if 'Auctorum' is still present
+            mypub = re.sub(r'Auctorum, |Auctorum$', 'auct. ', mypub)
+        if year_exists and not question_exists:  # if a year exists in publication
             year_start_index = year_exists.span()[0]
             year_end_index = year_exists.span()[1]
             year_out = mypub[year_start_index:year_end_index]
@@ -147,27 +182,48 @@ def publication_parser(mypub):
                 bracketed_date_out = False
                 year_out_print = year_out
             publication_notes_out = '; '.join([x.strip() for x in mypub[year_end_index:].split(',') if x])
+            publication_notes_out = re.sub(r'\((not .*)\)', '\\1', publication_notes_out)
+            publication_notes_out = re.sub(r'non \((.*)\)', 'not \\1', publication_notes_out)
+            publication_notes_out = re.sub(r';( [0-9][0-9][0-9][0-9]$)', ',\\1', publication_notes_out)
             authors_exist = mypub[0:year_start_index].strip()
         else:  # a year is not in the publication
-            year_out = '????'
+            year_out = ''
             year_out_print = '????'
             publication_notes_exist = re.search(r', [a-z].*?$', mypub)  # notes are typically ', [a-z][a-z]...'
             if publication_notes_exist:
                 publication_notes_out = '; '.join([x.strip() for x in publication_notes_exist[0].split(',') if x])
+                publication_notes_out = re.sub(r'\((not .*)\)', '\\1', publication_notes_out)
+                publication_notes_out = re.sub(r'non \((.*)\)', 'not \\1', publication_notes_out)
+                publication_notes_out = re.sub(r';( [0-9][0-9][0-9][0-9]$)', ',\\1', publication_notes_out)
                 year_start_index = publication_notes_exist.span()[0]
                 authors_exist = re.sub(fr'{publication_notes_exist[0]}', '', mypub)
             else:
                 publication_notes_out = ''
                 year_start_index = len(mypub)
-                authors_exist = True  # if no notes, no year, but pub exists, authors must exist
+                authors_exist = mypub
             bracketed_date_out = False
+            if question_exists:
+                year_start_index = re.search(r', \?\?\?\?', authors_exist).span()[0]
+            if authors_exist.split(',')[0] in ['unknown', 'Unknown', '????', '']:
+                authors_exist = False
         # AUTHOR PARSING STARTS HERE
         if authors_exist:  # if an author string exists
             authors = mypub[0:year_start_index].strip()  # authors are publication string up to location of year
+            authors = re.sub(r' -([A-Z])', '\\1', authors)  # fix author initials of the form: 'M. -L. Kim'
             authors = re.sub(r',$', r'', authors)  # remove trailing ','
             authors = re.sub(r'([A-Z])\.', r'\1. ', authors).replace('  ', ' ')  # put a space between initials
             if ' in ' in authors:  # if author string matches 'taxonomy specific' style
                 extra_author_info = re.search(r'( in .*)', authors)[0]  # capture 'in ...' text separately
+                if extra_author_info[0] != ' ':  # if extra author info does not start with ' '
+                    extra_author_info = ' ' + extra_author_info  # ensure extra author info starts with ' '
+                if extra_author_info[-1] == ' ':  # if extra author info does not end with ' '
+                    extra_author_info = extra_author_info[0:-1]  # ensure extra author info ends with ' '
+                authors = re.sub(extra_author_info, '', authors)  # remove extra author info
+                extra_author_info = re.sub(r'\b( et al).*', ',\\1.', extra_author_info)  # ensure 'et al' is formatted
+            elif ' sensu ' in authors:  # if authora sensu authorb in author string
+                if ', sensu ' in authors:  # if authora, sensu authorb in author string
+                    authors = authors.replace(', sensu ', ' sensu ')  # make sure no comma before sensu
+                extra_author_info = re.search(r'( sensu .*)', authors)[0]  # capture 'in ...' text separately
                 if extra_author_info[0] != ' ':  # if extra author info does not start with ' '
                     extra_author_info = ' ' + extra_author_info  # ensure extra author info starts with ' '
                 if extra_author_info[-1] == ' ':  # if extra author info does not end with ' '
@@ -180,8 +236,12 @@ def publication_parser(mypub):
                              r' Esq\.|, Esq\.| Esq,|, Esq,| Esq$|, Esq$| ESQ\.|, ESQ\.| ESQ,|, ESQ,| ESQ$|, ESQ$|'
                              r' MD\.| MD,| MD$|, MD\.|, MD,|, MD$|'
                              r', MS\.| MS\.| MS$| MS,|, MS,|, MS$', r'', authors)  # remove honorary titles
-            authors = re.sub(r',( Jr.*?| JR.*?| Sr.*?| SR.*?)$', capitalize_repl, authors)  # protect generational title
-            authors = re.sub(r',( I.*?| V.*?)$', '\\1', authors)  # protect generational titles
+            authors = re.sub(r',( Jnr[^A-Za-z]*?| JNR[^A-Za-z]*?|'
+                             r' Snr[^A-Za-z]*?| SNR[^A-Za-z]*?|'
+                             r' Jr[^A-Za-z]*?| JR[^A-Za-z]*?|'
+                             r' Sr[^A-Za-z]*?| SR[^A-Za-z]*?)$', capitalize_repl, authors)  # protect generational title
+            authors = re.sub(r',( I[^a-z]*?| V[^a-z]*?)$', '\\1', authors)  # protect generational titles
+            authors = authors.replace('Jnr', 'Jr').replace('Snr', 'Sr')
             if authors[-2:] in ['Jr', 'Sr']:  # ensure these titles end with '.'
                 authors = authors + '.'
             et_al_exists = re.search(r', et al*.?| et al*.?', authors)  # check if variants of 'et al' exist
@@ -216,7 +276,7 @@ def publication_parser(mypub):
                 # Authora, Authorb, and Authorc  # could be non-MLA
                 style = 'AMBIGUOUS'
             if style == 'AMBIGUOUS':
-                print('WARNING: AUTHOR STRING MAY BE AMBIGUOUSLY FORMATTED!')
+                print(f'WARNING: AUTHOR STRING MAY BE AMBIGUOUSLY FORMATTED!: {authors}')
             authors = re.sub(r' and | y | & ', r', ', authors)  # replace 'and', 'y', and '&' with ','
             authors = authors.replace(',,', ',')  # remove extra commas that may exist
             if style == 'MLA':  # if the style is MLA format
@@ -239,7 +299,6 @@ def publication_parser(mypub):
                 else:  # if a name is not out of order
                     temp_author_list.append(author)  # append the name to the list of authors
             author_list = temp_author_list  # write out temporary result to author_list
-            # TRY ALL FORMATS AND COMPARE RESULTS TO SEE IF ANY AGREE OR OBVIOUSLY BREAK SOME RULES?
             temp_author_list = []  # generate new temp list
             for author in author_list:  # CHECKS FOR APA FORMATTED AUTHORS
                 # names containing initials ONLY
@@ -272,16 +331,23 @@ def publication_parser(mypub):
                     temp_author_list.append(author + suffix)  # append the name and suffix to the list of authors
             author_list = temp_author_list  # write out temporary result to author_list
             number_of_authors = len(author_list)  # calculate final number of authors
-            author_list = [re.sub(r'( Jr.*?| Sr.*?| I.*?| V.*?)$', ',\\1', x) for
+            # TODO: next line will not handle names like: "de Villers, III', needs a 'de' protector
+            author_list = [re.sub(r'( Jr.*?| Sr.*?| I.*?| V.*?)$', ',\\1', x) if x.split(' ')[0] != 'de' else x for
                            x in author_list]  # comma-separate generational titles
             author_list_out = author_list  # write out result into author_list_out
-            author_list_display = [re.sub(r'(van |de |van de )', upper_repl, x) for x in  # protect prefixes from next
-                                   author_list_out]  # (I couldn't figure out the correct regex for this)
+            author_list_out = [re.sub(r'(^[A-Za-z])([A-Z][a-z])', "\\1'\\2", x)
+                               for x in author_list_out]  # ensure 'O' 'd' names separated with "'"
+            author_list_out = [', '.join([re.sub(fr"([A-Z])(?!{pLl})(?![a-z])(?!\.)(?!')",
+                                                 "\\1. ", x.split(',')[0])] + x.split(',')[1:]).replace('  ', ' ')
+                               for x in author_list_out]  # ensure initials are separated by '. ' (protect generational)
+            # protect prefixes from next line
+            author_list_display = [re.sub(r'(van |de |van de |der |van der )', upper_repl, x) for x in
+                                   author_list_out]  # (I couldn't figure out a better regex for this)
             author_list_display = [re.sub(r'([a-z]+)(?!.*^) ', r'. ', x) for x in
                                    author_list_display]  # collapse non-surnames to an initial (does not handle prefix)
             author_list_display = [re.sub(r'(\. (?![A-Z][a-z])+)', r'.', x) for x in
                                    author_list_display]  # remove space between initials
-            author_list_display = [re.sub(r'(VAN |DE |VAN DE )', lower_repl, x) for x in
+            author_list_display = [re.sub(r'(VAN |DE |VAN DE |DER |VAN DER )', lower_repl, x) for x in
                                    author_list_display]  # unprotect prefixes
             if et_al_exists:  # if input mypub has 'et al' in author string
                 number_of_authors = 25  # arbitrarily large value to trigger 'et al' in citation_out
@@ -304,22 +370,13 @@ def publication_parser(mypub):
         else:  # if four or more authors
             citation_out = author_list_display[0] + ' et al.' + extra_author_info + ', ' + year_out_print  #
     else:  # no publication was passed
-        author_list_out, year_out, citation_out, publication_notes_out, bracketed_date_out = [''], '', '', '', False
-    return author_list_out, year_out, citation_out, publication_notes_out, bracketed_date_out
+        original_pub, author_list_out, year_out = '', [''], ''
+        citation_out, publication_notes_out, bracketed_date_out = '', '', False
+    return original_pub, author_list_out, year_out, citation_out, publication_notes_out, bracketed_date_out
 
 
 def to_canonical(genus_in, species_in):
     return ' '.join([genus_in.strip(), species_in.strip()])
-
-
-def encoding_fix(author_in):
-    author_out = re.sub(r'Reb.lo', 'Rebêlo', author_in)
-    author_out = re.sub(r'Sep.lveda', 'Sepúlveda', author_out)
-    author_out = re.sub(r'Qui.onez', 'Quiñonez', author_out)
-    author_out = re.sub(r'J.nior', 'Júnior', author_out)
-    author_out = re.sub(r'Y..ez', 'Yáñez', author_out)
-    author_out = re.sub(r'Ord..ez', 'Ordóñez', author_out)
-    return author_out
 
 
 def name_note_extractor(name_in):
@@ -348,4 +405,7 @@ def subspecies_prefix_cleaner(name_in):
         replace('aber ', 'abberration ').replace('aberr ', 'abberration '). \
         replace('r ', 'race ').replace('rasse ', 'race ').replace('mut ', 'mutant')
     # mod = ???  # not sure what 'mod' means, but it is present sometimes
+    # seu = ???  # not sure what 'seu' means, but it can be present
+    # vel = ???  # not sure what 'vel' means, but it is present sometimes
+    # sive = ???  # not sure what 'sive' means, but it can be present
     return name_out
