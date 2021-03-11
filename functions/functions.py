@@ -62,6 +62,18 @@ def unicode_name_fix(line_in, parent_id_in):
                                 'Halictus flavopunctatus\xa0(Friese, 1924), author requires verification - NJD')
     line_out = line_out.replace('(Tkalců, valid subspecies, 1979)', '(Tkalců, 1979), valid subspecies')
     line_out = line_out.replace('Megachile Megachile (Austromegachile)', 'Megachile (Austromegachile)')
+    line_out = line_out.replace('Prosopis gracillima\xa0Schrottky, 1902, Prosopis gracillima var',
+                                'Prosopis gracillima\xa0Schrottky, 1902;\xa0Prosopis gracillima var')
+    line_out = line_out.replace('laevifrons var, moricei Friese, 1899', 'laevifrons var moricei Friese, 1899')
+    line_out = line_out.replace('tsinanensis\xa0(Cockerell, 1930), valid subspecies; V',
+                                'tsinanensis\xa0(Cockerell, 1930), valid subspecies')
+    line_out = line_out.replace('barretti\xa0(Cockerell, 1929)\xa0-- F', 'barretti\xa0(Cockerell, 1929)')
+    line_out = line_out.replace('jucundum Smith, 1879, Halictus jucundum', 'jucundum Smith, 1879;\xa0Halictus jucundum')
+    line_out = line_out.replace('Neochelynia paulista\xa0(Schrottky, 1920;',
+                                'Neochelynia paulista\xa0(Schrottky, 1920);')
+    line_out = line_out.replace('Pachyanthidium paulinierii\xa0(Guérin-Méneville, 1845;',
+                                'Pachyanthidium paulinierii\xa0(Guérin-Méneville, 1845);')
+
     # log which lines got changed for manual verification!
     if line_out != line_in:
         log_out = {
@@ -98,56 +110,92 @@ def lower_repl(match):
 
 
 def genus_extractor(record):
-    genus_out = [x for x in record.split(' ') if re.match(r'^[A-Z]', x)][0]
+    genus_exists = re.search(r'^(.*?)(?= .)', record)
+    if genus_exists:
+        genus_out = genus_exists[0]
+        if genus_out[0] == '(':
+            genus_out = ''
+    else:
+        genus_out = ''
     return genus_out
 
 
 def species_extractor(record):
+    record = re.sub(r'(\(.*?\))', '', record).strip().replace('  ', ' ')  # remove parenthetical info
+    record = re.sub(r'^(.*?) ', '', record).strip()  # consider only words after genus
     species_exists = [x for x in record.split(' ') if re.match(r'^[a-z]', x) or
                       re.search(r'^[A-Z]-', x) or re.search(r'^[0-9]-', x)]
-    # TODO: above does not seem to be working for: Allodape T-insignita Strand, 1912
-    # TODO: above does not seem to be working for:  Anthophora T-insignata Strand, 1913, invalid symbol
     species_exists = [x for x in species_exists if '(' not in x and ')' not in x]  # handles (Subgenus [text])
     if species_exists:
-        species_out = species_exists[0]
+        species_out = species_exists[0].strip()
     else:
         species_out = ''
     return species_out
 
 
 def subspecies_extractor(species_in, record):
-    subspecies_exists = re.findall(fr'{species_in} (.*?) [A-Z]', record)
-    subspecies_exists = [x for x in subspecies_exists if not re.search(r',$|^[A-Z]|and', x)]
-    if subspecies_exists:
-        # if subspecies_exists and len(subspecies_exists[0].split(' ')) == 1:
-        subspecies_out = subspecies_exists[0].replace('(', '').replace(')', '')
-    elif subspecies_exists:
-        subspecies_out = ''
+    record = re.sub(r'(\(.*?\))|(,.*)', '', record).strip().replace('  ', ' ')  # remove parenthetical info
+    if species_in != '':
+        record = re.search(fr'(?<={species_in} ).*?(?=[A-Z]|\([A-Z]|$)', record)
+        if record:
+            subspecies_out = record[0].strip()
+        else:
+            subspecies_out = ''
     else:
-        subspecies_out = ''
+        if re.search(r' [a-z].*? ', record):  # if any lowercase words exist (potential subspecies)
+            subspecies_out = re.sub(r'^(.*?) ([a-z].*)', '\\2', record)  # only words after genus and/or subgenus
+            subspecies_out = re.sub(r' [A-Z].*', '', subspecies_out)  # only words before publication
+        else:
+            subspecies_out = ''
     return subspecies_out
 
 
 def subgenus_extractor(genus_in, species_in, record):
     subgenus_exists = re.findall(fr'{genus_in} (.*?) {species_in}', record)
+    if not subgenus_exists:
+        # regex matches (Subgenus ...) anywhere except end of line and if (Subgenus ?) or (Subgenus [0-9])
+        # to avoid matching parenthetical publication string
+        subgenus_exists = re.search(r'(\(.*?[^0-9?]\))(?!$)', record)  # look for subgenus elsewhere
     if subgenus_exists:
-        subgenus_out = subgenus_exists[0].replace('(', '').replace(')', '')
+        subgenus_out = subgenus_exists[0].replace('(', '').replace(')', '').strip()
         # if contains 'sl' change to a subgenus note of 'sensu lato'
-        if ' sl' in subgenus_out or 's l' in subgenus_out:
-            subgenus_out = subgenus_out.replace(' sl', '_sl').replace('s l', '_sl')
+        if ' sl' in subgenus_out or 's l' in subgenus_out or 's_l' in subgenus_out:
+            subgenus_out = re.sub(r'[^A-Za-z]s[^A-Za-z]l|[^A-Za-z]sl', '_sl', subgenus_out).strip()
         # if contains 'vel' change to a subgenus note of 'vel*'
         if ' vel' in subgenus_out:
-            subgenus_out = re.sub(r' (vel) (.*)', '_\\1_\\2', subgenus_out)
+            subgenus_out = re.sub(r'[^A-Za-z](vel)[^A-Za-z](.*)', '_\\1_\\2', subgenus_out).strip()
     else:
         subgenus_out = ''
     return subgenus_out
 
 
-def publication_extractor(record):
-    publication_exists = [x for x in record.split(' ') if re.match(r'^\(|[A-Z]', x) and ')' not in x]
-    if len(publication_exists) > 1:
-        publication_start = publication_exists[1]
-        publication_out = record[record.index(publication_start):].replace('(', '').replace(')', '').strip()
+def publication_extractor(record, genus_in, subgenus_in, species_in, subspecies_in):
+    # if re.sub(fr'{genus_in}.*{subspecies_in}', '', record) != '':
+    #     if subgenus_in:
+    #         record = re.sub(fr'\({subgenus_in}.*?\)', fr'({subgenus_in})', record)  # remove subgenus notes
+    #     if subspecies_in != '':
+    #         publication_out = re.sub(fr'(.*?){subspecies_in} ', '', record)
+    #     elif species_in != '':
+    #         publication_out = re.sub(fr'(.*?){species_in} ', '', record)
+    #     elif subgenus_in != '':
+    #         publication_out = re.sub(fr'(.*?){subgenus_in}\) ', '', record)
+    #     elif genus_in != '':
+    #         publication_out = re.sub(fr'(.*?){genus_in} ', '', record)
+    #     else:
+    #         publication_out = record
+    # else:
+    #     publication_out = ''
+    if subspecies_in != '':
+        publication_out = re.sub(fr'{genus_in}.*{subspecies_in}', '', record).strip()
+    elif species_in != '':
+        publication_out = re.sub(fr'{genus_in}.*{species_in}', '', record).strip()
+    elif subgenus_in != '':
+        publication_out = re.sub(fr'{genus_in}.*{species_in}\)|'
+                                 fr'{genus_in}.*{subgenus_in}', '', record).strip()
+    elif genus_in != '':
+        publication_out = re.sub(fr'{genus_in}', '', record).strip()
+    elif record != '':
+        publication_out = record
     else:
         publication_out = ''
     return publication_out
@@ -157,12 +205,21 @@ def publication_parser(mypub):
     original_pub = mypub
     mypub = encoding_fix(mypub)
     if mypub:  # if a publication was passed
+        if re.search(r'^sensu', mypub):
+            mypub = re.sub(r'^(sensu)', 'Unknown, ????, \\1', mypub)
+        if re.search(r'\([^no]', mypub) and \
+                re.search(r'\)', mypub) and not \
+                re.search(r'no. \(', mypub):
+            parenthetical_exists = True
+            mypub = mypub.replace('(', '').replace(')', '').strip()
+        else:
+            parenthetical_exists = False
         # find position of year, if it exists; ignore any year-like substrings after 'Auctorum'
         year_exists = re.search(r'[0-9][0-9][0-9][0-9]', mypub.split('Auctorum')[0])
         question_exists = re.search(r'\?\?\?\?', mypub)  # test if '????' exists
         auct_at_start = re.search(r'^[Aa]uct', mypub)  # test if pub starts with Auct or auct
         if auct_at_start:
-            mypub = re.sub(r'^[Aa](uct)( |\. |, |orum |orum, |orum )(.*)|^[Aa]uct.*',
+            mypub = re.sub(r'^[Aa](uct)( |\. |, |orum |orum, )(.*)|^[Aa]uct.*',
                            'Unknown, ????, auct. \\3', mypub)
             question_exists = re.search(r'\?\?\?\?', mypub)
         auctorum_exists = re.search(r'Auctorum', mypub)  # test if 'Auctorum' exists anywhere
@@ -181,7 +238,8 @@ def publication_parser(mypub):
             else:
                 bracketed_date_out = False
                 year_out_print = year_out
-            publication_notes_out = '; '.join([x.strip() for x in mypub[year_end_index:].split(',') if x])
+            publication_notes_out = '; '.join([x.strip() for x in mypub[year_end_index:].
+                                              split(',') if x != '' and x != ' '])
             publication_notes_out = re.sub(r'\((not .*)\)', '\\1', publication_notes_out)
             publication_notes_out = re.sub(r'non \((.*)\)', 'not \\1', publication_notes_out)
             publication_notes_out = re.sub(r';( [0-9][0-9][0-9][0-9]$)', ',\\1', publication_notes_out)
@@ -191,7 +249,8 @@ def publication_parser(mypub):
             year_out_print = '????'
             publication_notes_exist = re.search(r', [a-z].*?$', mypub)  # notes are typically ', [a-z][a-z]...'
             if publication_notes_exist:
-                publication_notes_out = '; '.join([x.strip() for x in publication_notes_exist[0].split(',') if x])
+                publication_notes_out = '; '.join([x.strip() for x in publication_notes_exist[0].
+                                                  split(',') if x != '' and x != ' '])
                 publication_notes_out = re.sub(r'\((not .*)\)', '\\1', publication_notes_out)
                 publication_notes_out = re.sub(r'non \((.*)\)', 'not \\1', publication_notes_out)
                 publication_notes_out = re.sub(r';( [0-9][0-9][0-9][0-9]$)', ',\\1', publication_notes_out)
@@ -223,13 +282,14 @@ def publication_parser(mypub):
             elif ' sensu ' in authors:  # if authora sensu authorb in author string
                 if ', sensu ' in authors:  # if authora, sensu authorb in author string
                     authors = authors.replace(', sensu ', ' sensu ')  # make sure no comma before sensu
-                extra_author_info = re.search(r'( sensu .*)', authors)[0]  # capture 'in ...' text separately
+                extra_author_info = re.search(r'( sensu .*)', authors)[0]  # capture 'sensu ...' text separately
                 if extra_author_info[0] != ' ':  # if extra author info does not start with ' '
                     extra_author_info = ' ' + extra_author_info  # ensure extra author info starts with ' '
                 if extra_author_info[-1] == ' ':  # if extra author info does not end with ' '
                     extra_author_info = extra_author_info[0:-1]  # ensure extra author info ends with ' '
                 authors = re.sub(extra_author_info, '', authors)  # remove extra author info
                 extra_author_info = re.sub(r'\b( et al).*', ',\\1.', extra_author_info)  # ensure 'et al' is formatted
+                year_out = ''
             else:  # if author string does not match 'taxonomy specific' style
                 extra_author_info = ''  # there is no extra author info
             authors = re.sub(r' PhD\.|, PhD\.| PhD,|, PhD,| PhD$|, PhD$| PHD\.|, PHD\.| PHD,|, PHD,| PHD$|, PHD$|'
@@ -241,6 +301,11 @@ def publication_parser(mypub):
                              r' Jr[^A-Za-z]*?| JR[^A-Za-z]*?|'
                              r' Sr[^A-Za-z]*?| SR[^A-Za-z]*?)$', capitalize_repl, authors)  # protect generational title
             authors = re.sub(r',( I[^a-z]*?| V[^a-z]*?)$', '\\1', authors)  # protect generational titles
+            # authors = re.sub(r',( Jnr[^A-Za-z]*?| JNR[^A-Za-z]*?|'
+            #                  r' Snr[^A-Za-z]*?| SNR[^A-Za-z]*?|'
+            #                  r' Jr[^A-Za-z]*?| JR[^A-Za-z]*?|'
+            #                  r' Sr[^A-Za-z]*?| SR[^A-Za-z]*?|'
+            #                  r' I[^a-z]*?| V[^a-z]*?| V$| I$)$', capitalize_repl, authors)  # protect generational title
             authors = authors.replace('Jnr', 'Jr').replace('Snr', 'Sr')
             if authors[-2:] in ['Jr', 'Sr']:  # ensure these titles end with '.'
                 authors = authors + '.'
@@ -369,33 +434,62 @@ def publication_parser(mypub):
                 -1] + extra_author_info + ', ' + year_out_print
         else:  # if four or more authors
             citation_out = author_list_display[0] + ' et al.' + extra_author_info + ', ' + year_out_print  #
+        if parenthetical_exists:
+            citation_out = '(' + citation_out + ')'
     else:  # no publication was passed
         original_pub, author_list_out, year_out = '', [''], ''
         citation_out, publication_notes_out, bracketed_date_out = '', '', False
+    # troubleshooting:
+    # if any([re.search(r'[_()]', x) for x in author_list_out]):
+    #     print(f"PROBLEM DETECTED WITH: {original_pub}")
+    if any([re.search(r' -', x) for x in author_list_out]):
+        print(f"PROBLEM DETECTED WITH: {original_pub}")
     return original_pub, author_list_out, year_out, citation_out, publication_notes_out, bracketed_date_out
 
 
 def to_canonical(genus_in, species_in):
-    return ' '.join([genus_in.strip(), species_in.strip()])
+    if genus_in != '' and species_in != '':
+        canonical_out = ' '.join([genus_in.strip(), species_in.strip()])
+    elif genus_in != '' and species_in == '':
+        canonical_out = genus_in
+    else:  # do not produce canonical if genus is missing
+        canonical_out = ''
+    return canonical_out
 
 
 def name_note_extractor(name_in):
-    if '_' in name_in:
-        note_out = '_'.join([x.strip() for x in name_in.split('_')[1:]])
-        # remove numbers from name notes (these are probably citation numbers?)
-        # resolve some common abbreviated notes
-        note_out = '; '.join([re.sub(r'[a-z][0-9]$', '', x).
-                             replace('sic.', 'sic').
-                             replace('.', '').replace('auct', 'auctorum')
-                              for x in note_out.split(' ')]). \
-            replace('.', '').replace('sl', 'sensu lato').replace('homonytm', 'homonym')
-        note_out = re.sub(r'homony$', 'homonym', note_out)
-        note_out = re.sub(r'misdet', 'misidentification', note_out.replace('.', ''))
-        name_out = name_in.split('_')[0].replace('_', ' ')
+    # check for multi-part names (particularly subspecies like: 'var subspecies')
+    complete_name_out = name_in
+    if name_in != '':
+        if ' ' in name_in:
+            notes1 = '; '.join([x.strip() for x in name_in.split(' ')[0:-1] if x])
+            name_in = name_in.split(' ')[-1].strip()
+        else:
+            notes1 = ''
+        if '_' in name_in:
+            note_out = '_'.join([x.strip() for x in name_in.split('_')[1:]])
+            # remove numbers from name notes (these are probably citation numbers?)
+            # resolve some common abbreviated notes
+            note_out = '; '.join([re.sub(r'[a-z][0-9]$', '', x).
+                                 replace('sic.', 'sic').
+                                 replace('.', '').replace('auct', 'auctorum')
+                                  for x in note_out.split(' ')]). \
+                replace('.', '').replace('sl', 'sensu lato').replace('homonytm', 'homonym')
+            note_out = re.sub(r'homony$', 'homonym', note_out)
+            note_out = re.sub(r'misdet', 'misidentification', note_out.replace('.', ''))
+            if notes1 != '':
+                note_out = '; '.join([notes1, note_out])
+            name_out = name_in.split('_')[0].replace('_', ' ').strip()
+        elif notes1 != '':
+            name_out = name_in
+            note_out = notes1
+        else:
+            name_out = name_in
+            note_out = ''
     else:
-        name_out = name_in
+        name_out = ''
         note_out = ''
-    return name_out, note_out
+    return complete_name_out, name_out, note_out
 
 
 def subspecies_prefix_cleaner(name_in):

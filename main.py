@@ -32,12 +32,19 @@ for line in data[0]:
         # name = names[0]  # testing
         status = 'accepted'
         for name in names:
-            genus, genus_notes = functions.name_note_extractor(functions.genus_extractor(name))
-            species, species_notes = functions.name_note_extractor(functions.species_extractor(name))
-            subgenus, subgenus_notes = functions.name_note_extractor(functions.subgenus_extractor(genus, species, name))
-            subspecies, subspecies_notes = functions.name_note_extractor(functions.subspecies_extractor(species, name))
+            name = name.strip().replace('( ', '(').\
+                replace(' )', ')').replace('[ ', '[').replace(' ]', ']')  # clean up any whitespace problems in name
+            name = re.sub(r'(\S)(\()', '\\1 \\2', name)  # '(' always preceded by whitespace
+            name = re.sub(r'(\))(\S)', '\\1 \\2', name)  # ')' always followed by whitespace
+            gcomplete, genus, genus_notes = functions.name_note_extractor(functions.genus_extractor(name))
+            spcomplete, species, species_notes = functions.name_note_extractor(functions.species_extractor(name))
+            sgcomplete, subgenus, subgenus_notes = functions.name_note_extractor(
+                functions.subgenus_extractor(gcomplete, spcomplete, name))
+            sppcomplete, subspecies, subspecies_notes = functions.name_note_extractor(
+                functions.subspecies_extractor(spcomplete, name))
             canonical_name = functions.to_canonical(genus, species)
-            pub_data = functions.publication_extractor(name)
+            # TODO: support trinomial canonical names if spp valid
+            pub_data = functions.publication_extractor(name, gcomplete, sgcomplete, spcomplete, sppcomplete)
             original_publication_data, author_list, year, citation, publication_notes, bracketed_date =\
                 functions.publication_parser(pub_data)
             # if publication_notes contains 'valid subspecies', raise status to 'accepted'

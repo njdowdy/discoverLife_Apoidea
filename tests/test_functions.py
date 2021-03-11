@@ -25,7 +25,7 @@ from functions import functions
 # Authora,    Authorb, and Authorc # APA/other FORMAT
 
 
-class Test(TestCase):
+class TestPublicationParsing(TestCase):
 
     def test_encoding_fix(self):
         self.assertEqual('Rebêlo', functions.encoding_fix('Reb�lo'))
@@ -56,8 +56,9 @@ class Test(TestCase):
                          functions.publication_parser('Auctorum'))
         self.assertEqual(('Auctorum, misidentification', [''], '', 'Unknown, ????', 'auct. misidentification', False),
                          functions.publication_parser('Auctorum, misidentification'))
-        self.assertEqual(('Auctorum, sensu Authora, 1999', [''], '', 'Unknown, ????', 'auct. sensu Authora, 1999', False),
-                         functions.publication_parser('Auctorum, sensu Authora, 1999'))
+        self.assertEqual(
+            ('Auctorum, sensu Authora, 1999', [''], '', 'Unknown, ????', 'auct. sensu Authora, 1999', False),
+            functions.publication_parser('Auctorum, sensu Authora, 1999'))
         self.assertEqual(('Authora, 1950, Auctorum, sensu Authora, 1999', ['Authora'], '1950',
                           'Authora, 1950', 'auct. sensu Authora, 1999', False),
                          functions.publication_parser('Authora, 1950, Auctorum, sensu Authora, 1999'))
@@ -80,6 +81,9 @@ class Test(TestCase):
         self.assertEqual(('Authora and Authorb, [1999], note1', ['Authora', 'Authorb'], '1999',
                           'Authora and Authorb, [1999]', 'note1', True),
                          functions.publication_parser('Authora and Authorb, [1999], note1'))
+        self.assertEqual(('Authora and Authorb, [1999] , note1', ['Authora', 'Authorb'], '1999',
+                          'Authora and Authorb, [1999]', 'note1', True),
+                         functions.publication_parser('Authora and Authorb, [1999] , note1'))
         self.assertEqual(('Authora and Authorb, [1999], note1, note2', ['Authora', 'Authorb'], '1999',
                           'Authora and Authorb, [1999]', 'note1; note2', True),
                          functions.publication_parser('Authora and Authorb, [1999], note1, note2'))
@@ -258,11 +262,17 @@ class Test(TestCase):
 
     def test_publication_sensu(self):  # publications with 'sensu'
         self.assertEqual(('Authora sensu Authorb, 2000', ['Authora'],
-                          '2000', 'Authora sensu Authorb, 2000', '', False),
+                          '', 'Authora sensu Authorb, 2000', '', False),
                          functions.publication_parser('Authora sensu Authorb, 2000'))
         self.assertEqual(('Authora, sensu Authorb, 2000', ['Authora'],
-                          '2000', 'Authora sensu Authorb, 2000', '', False),
+                          '', 'Authora sensu Authorb, 2000', '', False),
                          functions.publication_parser('Authora, sensu Authorb, 2000'))
+        self.assertEqual(('Authora 1999, sensu Authorb, 2000', ['Authora'],
+                          '1999', 'Authora, 1999', 'sensu Authorb, 2000', False),
+                         functions.publication_parser('Authora 1999, sensu Authorb, 2000'))
+        self.assertEqual(('sensu Authorb, 2000', [''],
+                          '', 'Unknown, ????', 'sensu Authorb, 2000', False),
+                         functions.publication_parser('sensu Authorb, 2000'))
 
     def test_publication_hyphenated_names(self):  # Surnames containing hyphens, comma-separated authors/initials
         self.assertEqual(('Authora-Authora and Authorb, 2000', ['Authora-Authora', 'Authorb'],
@@ -282,6 +292,9 @@ class Test(TestCase):
         self.assertEqual(
             ("de Villers, 2000", ['de Villers'], '2000', 'de Villers, 2000', '', False),
             functions.publication_parser("de Villers, 2000"))
+        self.assertEqual(
+            ("Frank de Villers, 2000", ['Frank de Villers'], '2000', 'F. de Villers, 2000', '', False),
+            functions.publication_parser("Frank de Villers, 2000"))
 
     def test_publication_missing_comma_before_and(self):
         # 'surname1, surname2 and surname 3, comma-separated authors/initials
@@ -297,3 +310,223 @@ class Test(TestCase):
             ("Authora, Iauthorb and Authorc, 2000", ['Authora', 'Iauthorb', 'Authorc'], '2000',
              'Authora, Iauthorb, and Authorc, 2000', '', False),
             functions.publication_parser("Authora, Iauthorb and Authorc, 2000"))
+
+    def test_publication_parenthetical(self):  # parenthetical citations
+        self.assertEqual(('(Authora and Authorb, 2000), notes', ['Authora', 'Authorb'], '2000',
+                          '(Authora and Authorb, 2000)', 'notes', False),
+                         functions.publication_parser('(Authora and Authorb, 2000), notes'))
+        self.assertEqual(('(Authora), notes', ['Authora'], '',
+                          '(Authora, ????)', 'notes', False),
+                         functions.publication_parser('(Authora), notes'))
+
+
+class TestSubspeciesParsing(TestCase):
+    def test_noSubspecies(self):
+        self.assertEqual('',
+                         functions.subspecies_extractor('species_note',
+                                                        'Genus (Subgenus) species_note (Author, 2000)'))
+        self.assertEqual('',
+                         functions.subspecies_extractor('species_note',
+                                                        'Genus (Subgenus) species_note Author, 2000'))
+        self.assertEqual('',
+                         functions.subspecies_extractor('species_note',
+                                                        'Genus Subgenus species_note Author, 2000'))
+        self.assertEqual('',
+                         functions.subspecies_extractor('species_note',
+                                                        'Genus (Subgenus) species_note Author, 2000, notes'))
+        self.assertEqual('',
+                         functions.subspecies_extractor('species_note',
+                                                        'Genus Subgenus species_note Author, 2000, notes'))
+        self.assertEqual('',
+                         functions.subspecies_extractor('species_note',
+                                                        'Genus (Subgenus) species_note (Author, 2000), notes'))
+        self.assertEqual('',
+                         functions.subspecies_extractor('species_note',
+                                                        'Genus Subgenus species_note (Author, 2000), notes'))
+
+    def test_noSpecies(self):
+        self.assertEqual('',
+                         functions.subspecies_extractor('', 'Genus (Subgenus) Wu, 2000'))
+
+    def test_hasSpeciesAndSubspecies(self):
+        self.assertEqual('subspecies',
+                         functions.subspecies_extractor('species_note',
+                                                        'Genus Subgenus species_note subspecies Author, 2000'))
+
+    def test_hasSubspeciesNotes(self):
+        self.assertEqual('subspecies_note',
+                         functions.subspecies_extractor('species_note',
+                                                        'Genus Subgenus species_note subspecies_note Author, 2000'))
+
+    def test_hasSubspeciesPrefix(self):
+        self.assertEqual('var subspecies_note',
+                         functions.subspecies_extractor('species_note',
+                                                        'Genus Subgenus species_note var subspecies_note Author, 2000'))
+
+    def test_hasPrefixMissingSpeciesHasParenthetical(self):
+        self.assertEqual('var subspecies_note',
+                         functions.subspecies_extractor('',
+                                                        'Genus (Subgenus) var subspecies_note (Author, 2000)'))
+
+    def test_hasPrefixMissingSpeciesMissingParenthetical(self):
+        self.assertEqual('var subspecies_note',
+                         functions.subspecies_extractor('', 'Genus Subgenus var subspecies_note Author, 2000'))
+
+
+class TestGenusParsing(TestCase):
+    def test_basic(self):
+        self.assertEqual('Genus',
+                         functions.genus_extractor('Genus (Subgenus) var subspecies_note Author, 2000'))
+        self.assertEqual('Genus',
+                         functions.genus_extractor('Genus species Author, 2000'))
+        self.assertEqual('Genus',
+                         functions.genus_extractor('Genus species (Author, 2000)'))
+
+    def test_noSubgenusParenthetical(self):
+        self.assertEqual('Genus',
+                         functions.genus_extractor('Genus Subgenus var subspecies_note Author, 2000'))
+
+    def test_noGenusHasSubgenusParenthetical(self):
+        self.assertEqual('',
+                         functions.genus_extractor('(Subgenus) var subspecies_note Author, 2000'))
+
+
+class TestSpeciesParsing(TestCase):
+    def test_basic(self):
+        self.assertEqual('species',
+                         functions.species_extractor('Genus (Subgenus) species subspecies Author, 2000'))
+        self.assertEqual('species',
+                         functions.species_extractor('Genus species subspecies Author, 2000'))
+        self.assertEqual('species',
+                         functions.species_extractor('Genus species subspecies (Author, 2000)'))
+        self.assertEqual('species',
+                         functions.species_extractor('Genus species Author, 2000'))
+        self.assertEqual('species',
+                         functions.species_extractor('Genus Subgenus species subspecies Author, 2000'))
+
+    def test_hasNote(self):
+        self.assertEqual('species_note',
+                         functions.species_extractor('Genus (Subgenus) species_note subspecies Author, 2000'))
+        self.assertEqual('species_note',
+                         functions.species_extractor('Genus Subgenus species_note subspecies Author, 2000'))
+        self.assertEqual('species_note',
+                         functions.species_extractor('Genus (Subgenus) species_note subspecies (Author, 2000)'))
+
+
+class TestSubgenusParsing(TestCase):
+    def test_basic(self):
+        self.assertEqual('Subgenus',
+                         functions.subgenus_extractor('Genus', 'species',
+                                                      'Genus (Subgenus) species subspecies Author, 2000'))
+        self.assertEqual('Subgenus',
+                         functions.subgenus_extractor('Genus', 'species',
+                                                      'Genus Subgenus species subspecies Author, 2000'))
+
+    def test_noSubgenus(self):
+        self.assertEqual('',
+                         functions.subgenus_extractor('Genus', 'species', 'Genus species Author, 2000'))
+        self.assertEqual('',
+                         functions.subgenus_extractor('Genus', 'species', 'Genus species (Author, 2000)'))
+        self.assertEqual('',
+                         functions.subgenus_extractor('Genus', 'species', 'Genus species Author, 2000, notes'))
+        self.assertEqual('',
+                         functions.subgenus_extractor('Genus', 'species', 'Genus species (Author, 2000), notes'))
+
+    def test_placedOutOfOrder(self):
+        self.assertEqual('Subgenus',
+                         functions.subgenus_extractor('Genus', 'species', 'Genus species (Subgenus) Author, 2000'))
+        self.assertEqual('Subgenus',
+                         functions.subgenus_extractor('Genus', 'species', 'Genus species (Subgenus) (Author, 2000)'))
+        self.assertEqual('Subgenus',
+                         functions.subgenus_extractor('Genus', 'species',
+                                                      'Genus species (Subgenus) Author, 2000, notes'))
+        self.assertEqual('Subgenus',
+                         functions.subgenus_extractor('Genus', 'species',
+                                                      'Genus species (Subgenus) (Author, 2000), notes'))
+        # the following cases are not handled in order to prevent matching the more common parenthetical publication
+        self.assertEqual('',
+                         functions.subgenus_extractor('Genus', 'species', 'Genus species (Subgenus)'))
+        self.assertEqual('',
+                         functions.subgenus_extractor('Genus', 'species', 'Genus species (Subgenus ?)'))
+
+    def test_hasNotes(self):
+        self.assertEqual('Subgenus_sl',
+                         functions.subgenus_extractor('Genus', 'species',
+                                                      'Genus (Subgenus s l) species subspecies Author, 2000'))
+        self.assertEqual('Subgenus_sl',
+                         functions.subgenus_extractor('Genus', 'species',
+                                                      'Genus (Subgenus s l) species subspecies Author, 2000, notes'))
+        self.assertEqual('Subgenus_sl',
+                         functions.subgenus_extractor('Genus', 'species',
+                                                      'Genus (Subgenus s l) species subspecies (Author, 2000), notes'))
+        self.assertEqual('Subgenus_sl',
+                         functions.subgenus_extractor('Genus', 'species_note',
+                                                      'Genus (Subgenus s l) species_note subspecies Author, 2000'))
+        self.assertEqual('Subgenus_sl',
+                         functions.subgenus_extractor('Genus', 'species_note',
+                                                      'Genus (Subgenus_s_l) species_note subspecies Author, 2000'))
+
+
+class TestNoteExtractor(TestCase):
+    def test_basic(self):
+        self.assertEqual(('species_note', 'species', 'note'), functions.name_note_extractor('species_note'))
+        self.assertEqual(('species_notea_noteb', 'species', 'notea_noteb'),
+                         functions.name_note_extractor('species_notea_noteb'))
+
+    def test_noName(self):
+        self.assertEqual(('', '', ''), functions.name_note_extractor(''))
+
+
+    def test_subspeciesPrefix(self):
+        self.assertEqual(('var subspecies_note', 'subspecies', 'var; note'),
+                         functions.name_note_extractor('var subspecies_note'))
+        self.assertEqual(('var subspecies_notea_noteb', 'subspecies', 'var; notea_noteb'),
+                         functions.name_note_extractor('var subspecies_notea_noteb'))
+        self.assertEqual(('var subspecies', 'subspecies', 'var'),
+                         functions.name_note_extractor('var subspecies'))
+
+
+class TestToCanonical(TestCase):
+    def test_basic(self):
+        self.assertEqual('Genus species', functions.to_canonical('Genus', 'species'))
+        self.assertEqual('Genus', functions.to_canonical('Genus', ''))
+        self.assertEqual('', functions.to_canonical('', 'species'))
+        self.assertEqual('', functions.to_canonical('', ''))
+
+
+class TestPublicationExtractor(TestCase):
+    def test_basic(self):
+        self.assertEqual('Author, 1999, notes',
+                         functions.publication_extractor(
+                             'Genus (Subgenus) species subspecies Author, 1999, notes',
+                             'Genus', 'Subgenus', 'species', 'subspecies'))
+        self.assertEqual('Author, 1999, notes',
+                         functions.publication_extractor(
+                             'Genus species subspecies Author, 1999, notes',
+                             'Genus', '', 'species', 'subspecies'))
+        self.assertEqual('Author, 1999, notes',
+                         functions.publication_extractor(
+                             'Genus species Author, 1999, notes',
+                             'Genus', '', 'species', ''))
+
+    def test_hasNotes(self):
+        self.assertEqual('Author, 1999, notes',
+                         functions.publication_extractor(
+                             'Genus (Subgenus) species_notes subspecies_notes Author, 1999, notes',
+                             'Genus', 'Subgenus', 'species_notes', 'subspecies_notes'))
+
+    def test_hasParenthetical(self):
+        self.assertEqual('(Author, 1999), notes',
+                         functions.publication_extractor(
+                             'Genus (Subgenus) species_notes subspecies_notes (Author, 1999), notes',
+                             'Genus', 'Subgenus', 'species_notes', 'subspecies_notes'))
+        self.assertEqual('(Author), notes',
+                         functions.publication_extractor(
+                             'Genus (Subgenus) species_notes subspecies_notes (Author), notes',
+                             'Genus', 'Subgenus', 'species_notes', 'subspecies_notes'))
+
+    def test_missingPublication(self):
+        self.assertEqual('',
+                         functions.publication_extractor(
+                             'Genus (Subgenus) species_notes subspecies_notes',
+                             'Genus', 'Subgenus', 'species_notes', 'subspecies_notes'))
