@@ -476,7 +476,6 @@ class TestNoteExtractor(TestCase):
     def test_noName(self):
         self.assertEqual(('', '', ''), functions.name_note_extractor(''))
 
-
     def test_subspeciesPrefix(self):
         self.assertEqual(('var subspecies_note', 'subspecies', 'var; note'),
                          functions.name_note_extractor('var subspecies_note'))

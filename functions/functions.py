@@ -296,16 +296,9 @@ def publication_parser(mypub):
                              r' Esq\.|, Esq\.| Esq,|, Esq,| Esq$|, Esq$| ESQ\.|, ESQ\.| ESQ,|, ESQ,| ESQ$|, ESQ$|'
                              r' MD\.| MD,| MD$|, MD\.|, MD,|, MD$|'
                              r', MS\.| MS\.| MS$| MS,|, MS,|, MS$', r'', authors)  # remove honorary titles
-            authors = re.sub(r',( Jnr[^A-Za-z]*?| JNR[^A-Za-z]*?|'
-                             r' Snr[^A-Za-z]*?| SNR[^A-Za-z]*?|'
-                             r' Jr[^A-Za-z]*?| JR[^A-Za-z]*?|'
-                             r' Sr[^A-Za-z]*?| SR[^A-Za-z]*?)$', capitalize_repl, authors)  # protect generational title
-            authors = re.sub(r',( I[^a-z]*?| V[^a-z]*?)$', '\\1', authors)  # protect generational titles
-            # authors = re.sub(r',( Jnr[^A-Za-z]*?| JNR[^A-Za-z]*?|'
-            #                  r' Snr[^A-Za-z]*?| SNR[^A-Za-z]*?|'
-            #                  r' Jr[^A-Za-z]*?| JR[^A-Za-z]*?|'
-            #                  r' Sr[^A-Za-z]*?| SR[^A-Za-z]*?|'
-            #                  r' I[^a-z]*?| V[^a-z]*?| V$| I$)$', capitalize_repl, authors)  # protect generational title
+            authors = re.sub(r',( [jJ][Nn]*[rR].*?|'
+                             r' [sS][Nn]*[rR].*?)$', capitalize_repl, authors)  # protect generational title
+            authors = re.sub(r',( I[^a-z]*?| V[^a-z]*?)$', upper_repl, authors)  # protect generational titles
             authors = authors.replace('Jnr', 'Jr').replace('Snr', 'Sr')
             if authors[-2:] in ['Jr', 'Sr']:  # ensure these titles end with '.'
                 authors = authors + '.'
@@ -335,7 +328,7 @@ def publication_parser(mypub):
                 style = 'NON-MLA'  # these conditions indicate NON MLA-style
             else:  # else, it is ambiguous
                 # Authora, Firstnamea Middlenamea, and Firstnameb Authorb  # spelled-out middlename could be MLA
-                # Authora, Lasname1 Lastname2, and Firstnameb Authorb  # non-hyphenated lastname could be non-MLA
+                # Authora, Lastname1 Lastname2, and Firstnameb Authorb  # non-hyphenated lastname could be non-MLA
                 #
                 # Authora, Firstnamea, and Authorb  # could be MLA
                 # Authora, Authorb, and Authorc  # could be non-MLA
@@ -379,7 +372,7 @@ def publication_parser(mypub):
             author_list = temp_author_list  # write out temporary result to author_list
             temp_author_list = []  # generate new temp list
             for author in author_list:  # CHECKS FOR AMA FORMATTED AUTHORS
-                trailing = re.search(r'( Jr.*?| Sr.*?| I.*?| V.*?)$', author)  # contains generational title
+                trailing = re.search(r'( [jJ][Nn]*[rR].*?| [sS][Nn]*[rR].*?| I[^a-z]*?| V[^a-z]*?)$', author)
                 if trailing:  # if generation title exists
                     suffix = author[trailing.span()[0]:trailing.span()[1]]  # separate generational title
                     author = author[0:trailing.span()[0]]  # remove generational title
@@ -396,24 +389,53 @@ def publication_parser(mypub):
                     temp_author_list.append(author + suffix)  # append the name and suffix to the list of authors
             author_list = temp_author_list  # write out temporary result to author_list
             number_of_authors = len(author_list)  # calculate final number of authors
-            # TODO: next line will not handle names like: "de Villers, III', needs a 'de' protector
-            author_list = [re.sub(r'( Jr.*?| Sr.*?| I.*?| V.*?)$', ',\\1', x) if x.split(' ')[0] != 'de' else x for
-                           x in author_list]  # comma-separate generational titles
+            # author_list = [re.sub(r',*( [Jj][Nn]*[Rr]| [Ss][Nn]*[Rr]| I[^a-z]*?$| V[^a-z]*?$)', ',\\1', x)
+            #                for x in author_list]  # comma-separate generational titles
+            # ensure roman generational titles preceded by ','
+            author_list = [re.sub(r'(, | )([Jj][Rr]\.*$|'
+                                  r'[Ss][Rr]\.*$|'
+                                  r'I[^a-z]*?|'
+                                  r'V[^a-z]*?)$', ', \\2', x) for x in author_list]
+            author_list = [re.sub(r'(^[A-Za-z])([A-Z][a-z])', "\\1'\\2", x)
+                           for x in author_list]  # ensure 'O' 'd' names separated with "'"
+            author_list = [re.sub(r' \. *| {2}', ' ',
+                                  re.sub(fr"([A-Z])(?!=|[a-z]|{pLl}|'|[A-Z]*$)",
+                                         "\\1. ", x))
+                           for x in author_list]  # ensure initials are separated by '. '
             author_list_out = author_list  # write out result into author_list_out
-            author_list_out = [re.sub(r'(^[A-Za-z])([A-Z][a-z])', "\\1'\\2", x)
-                               for x in author_list_out]  # ensure 'O' 'd' names separated with "'"
-            author_list_out = [', '.join([re.sub(fr"([A-Z])(?!{pLl})(?![a-z])(?!\.)(?!')",
-                                                 "\\1. ", x.split(',')[0])] + x.split(',')[1:]).replace('  ', ' ')
-                               for x in author_list_out]  # ensure initials are separated by '. ' (protect generational)
-            # protect prefixes from next line
+            # PREFIXES AND SUFFIXES MUST HAVE BEEN FIXED IN author_list_out HERE
+            # BEGIN COLLAPSING NON-SURNAMES
+            author_list_display = [re.sub(r'( [Jj][Nn]*[Rr]|'
+                                          r' [Ss][Nn]*[Rr]|'
+                                          r' I[^a-z]*?$|'
+                                          r' V[^a-z]*?$)\.', upper_repl, x)
+                                   for x in author_list_out]  # protect generational titles
             author_list_display = [re.sub(r'(van |de |van de |der |van der )', upper_repl, x) for x in
-                                   author_list_out]  # (I couldn't figure out a better regex for this)
-            author_list_display = [re.sub(r'([a-z]+)(?!.*^) ', r'. ', x) for x in
-                                   author_list_display]  # collapse non-surnames to an initial (does not handle prefix)
-            author_list_display = [re.sub(r'(\. (?![A-Z][a-z])+)', r'.', x) for x in
+                                   author_list_display]  # (I couldn't figure out a better regex for this)
+            # THE FOLLOWING LINES ESSENTIALLY DO THIS OVER A LIST OF NAMES:
+            # in_string = "O'Authora"
+            # search = ' '.join(re.sub(r',[A-Z]+ |'
+            #                          r' [A-Z]+ |'
+            #                          r', [A-Z]+$|'
+            #                          r' [A-Z]+$', ' ', in_string).strip().split(' ')[0:-1])
+            # replace = re.sub('[a-z]+', '.', search)
+            # full = in_string.replace(search, replace)
+            author_list_display = [x.replace(' '.join(re.sub(r',[A-Z]+ |'
+                                                             r' [A-Z]+ |'
+                                                             r', [A-Z]+$|'
+                                                             r' [A-Z]+$', ' ', x)
+                                                      .strip().split(' ')[0:-1]),
+                                             re.sub('[a-z]+', '.', ' '
+                                                    .join(re.sub(r',[A-Z]+ | [A-Z]+ |, [A-Z]+$| [A-Z]+$', ' ', x)
+                                                          .strip().split(' ')[0:-1]))) for x in author_list_display]
+            author_list_display = [re.sub(r'(\. (?![A-Z][a-z]|[A-Z]+ )+)', r'.', x) for x in
                                    author_list_display]  # remove space between initials
             author_list_display = [re.sub(r'(VAN |DE |VAN DE |DER |VAN DER )', lower_repl, x) for x in
                                    author_list_display]  # unprotect prefixes
+            author_list_display = [re.sub(r'( JR| SR)', capitalize_repl, x) for x in
+                                   author_list_display]  # unprotect generational titles
+            author_list_display = [re.sub(r'(, | )(Jr$|Sr$)', ', \\2.', x) for x in
+                                   author_list_display]  # add '.' to generational titles
             if et_al_exists:  # if input mypub has 'et al' in author string
                 number_of_authors = 25  # arbitrarily large value to trigger 'et al' in citation_out
         else:  # if an author string does not exist
